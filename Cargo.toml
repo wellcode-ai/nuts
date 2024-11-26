@@ -1,0 +1,13 @@
+[package]
+name = "nuts"
+version = "0.1.0"
+edition = "2021"
+authors = ["PimoussTO <pimouss@wellcode.ai>"]
+description = "Nuts CLI tool"
+license = "MIT"
+
+[dependencies]
+
+[[bin]]
+name = "nuts"
+path = "src/main.rs"
