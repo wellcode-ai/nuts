@@ -131,6 +131,15 @@ impl NutsShell {
             Some(cmd) => match cmd.as_str() {
                 "call" => {
                     if parts.len() > 1 {
+                        let (method, url, body) = if parts[1].to_uppercase() == "POST" {
+                            ("POST", parts[2].clone(), parts.get(3).cloned())
+                        } else {
+                            ("GET", parts[1].clone(), None)
+                        };
+                        
+                        // Store the request before executing
+                        self.store_last_request(method.to_string(), url.clone(), body.clone());
+                        
                         CallCommand::new().execute(&parts.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).await?;
                     } else {
                         println!("❌ Usage: call [METHOD] URL [JSON_BODY]");
