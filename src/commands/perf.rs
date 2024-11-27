@@ -2,7 +2,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering, AtomicUsize, AtomicU64};
 use std::error::Error;
 use std::io::Write;
 
@@ -19,57 +19,88 @@ impl PerfCommand {
         }
     }
 
-    pub async fn run(&self, url: &str, users: usize, duration: Duration) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(&self, url: &str, users: u32, duration: Duration, method: &str, body: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         println!("🚀 Starting performance test");
         println!("URL: {}", url);
+        println!("Method: {}", method);
         println!("Users: {}", users);
-        println!("Duration: {:?}", duration);
-        
-        let metrics = Arc::new(Metrics::new());
-        let start_time = Instant::now();
-        let stop_signal = Arc::new(AtomicBool::new(false));
-        
-        // Progress bar
-        let pb = ProgressBar::new(duration.as_secs());
-        pb.set_style(ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")
-            .unwrap());
+        println!("Duration: {}s", duration.as_secs());
+        if let Some(body) = body {
+            println!("Body: {}", body);
+        }
+        println!("\nProgress:");
 
-        // Spawn user simulations
+        let client = reqwest::Client::new();
+        let start_time = std::time::Instant::now();
+        let request_count = Arc::new(AtomicUsize::new(0));
+        let total_latency = Arc::new(AtomicU64::new(0));
+
+        // Print progress every second
+        let progress_count = request_count.clone();
+        let progress_handle = tokio::spawn(async move {
+            while start_time.elapsed() < duration {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                let current = progress_count.load(Ordering::Relaxed);
+                print!("\rRequests completed: {} | Elapsed: {:?}", current, start_time.elapsed());
+                std::io::stdout().flush().unwrap();
+            }
+        });
+
         let mut handles = vec![];
-        for user_id in 0..users {
-            let metrics: Arc<Metrics> = Arc::clone(&metrics);
-            let stop_signal: Arc<AtomicBool> = Arc::clone(&stop_signal);
+        for _ in 0..users {
+            let client = client.clone();
             let url = url.to_string();
-            let client = self.client.clone();
-            
-            handles.push(tokio::spawn(async move {
-                while !stop_signal.load(Ordering::Relaxed) {
-                    match Self::make_request(&client, &url).await {
-                        Ok(metric) => metrics.record(metric),
-                        Err(e) => metrics.record_error(format!("User {}: {}", user_id, e)),
+            let request_count = request_count.clone();
+            let total_latency = total_latency.clone();
+            let method = method.to_string();
+            let body = body.map(String::from);
+
+            let handle = tokio::spawn(async move {
+                while start_time.elapsed() < duration {
+                    let start = std::time::Instant::now();
+                    
+                    let request = match method.as_str() {
+                        "POST" => {
+                            if let Some(body) = &body {
+                                client.post(&url).body(body.clone())
+                            } else {
+                                client.post(&url)
+                            }
+                        },
+                        _ => client.get(&url),
                     };
-                    tokio::time::sleep(Duration::from_millis(50)).await;
+
+                    if let Ok(_) = request.send().await {
+                        request_count.fetch_add(1, Ordering::Relaxed);
+                        let latency = start.elapsed().as_millis() as u64;
+                        total_latency.fetch_add(latency, Ordering::Relaxed);
+                    }
                 }
-            }));
+            });
+            handles.push(handle);
         }
 
-        // Update progress
-        while start_time.elapsed() < duration {
-            pb.set_position(start_time.elapsed().as_secs());
-            self.display_live_stats(&metrics);
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-
-        // Signal completion and wait for tasks
-        stop_signal.store(true, Ordering::Relaxed);
         for handle in handles {
             handle.await?;
         }
 
-        pb.finish_with_message("Test completed");
-        self.display_final_report(&metrics);
+        // Wait for progress to finish
+        progress_handle.await?;
+        println!("\n\nTest completed!");
         
+        // Print final results
+        let total_requests = request_count.load(Ordering::Relaxed);
+        let avg_latency = if total_requests > 0 {
+            total_latency.load(Ordering::Relaxed) as f64 / total_requests as f64
+        } else {
+            0.0
+        };
+
+        println!("\nResults:");
+        println!("Total Requests: {}", total_requests);
+        println!("Average Latency: {:.2}ms", avg_latency);
+        println!("Requests/second: {:.2}", total_requests as f64 / duration.as_secs_f64());
+
         Ok(())
     }
 

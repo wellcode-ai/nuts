@@ -151,11 +151,16 @@ impl NutsShell {
                 },
                 "perf" => {
                     if parts.len() < 2 {
-                        println!("❌ Usage: perf URL [--users N] [--duration Ns]");
+                        println!("❌ Usage: perf [METHOD] URL [--users N] [--duration Ns] [BODY]");
                         return Ok(());
                     }
                     
-                    let url = &parts[1];
+                    let (method, url) = if parts[1].to_uppercase() == "POST" {
+                        ("POST", &parts[2])
+                    } else {
+                        ("GET", &parts[1])
+                    };
+                    
                     let users = parts.iter()
                         .position(|x| x == "--users")
                         .and_then(|i| parts.get(i + 1))
@@ -169,7 +174,17 @@ impl NutsShell {
                         .map(|secs| std::time::Duration::from_secs(secs))
                         .unwrap_or(std::time::Duration::from_secs(30));
 
-                    PerfCommand::new().run(url, users, duration).await?;
+                    // Find body if present (after all flags)
+                    let body = if method == "POST" {
+                        parts.iter()
+                            .skip_while(|&p| p == "--users" || p == "--duration" || p.ends_with('s') || p.parse::<u32>().is_ok())
+                            .last()
+                            .map(String::as_str)
+                    } else {
+                        None
+                    };
+
+                    PerfCommand::new().run(url, users, duration, method, body).await?;
                 },
                 "security" => {
                     let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY")
