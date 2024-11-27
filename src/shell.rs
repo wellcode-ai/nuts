@@ -8,11 +8,13 @@ use crate::commands::perf::PerfCommand;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use crate::collections::{Collection, Endpoint};
 
 pub struct NutsShell {
     editor: Editor<NutsCompleter, DefaultHistory>,
     history: Vec<String>,
     suggestions: Vec<String>,
+    last_request: Option<(String, String, Option<String>)>,
 }
 
 impl NutsShell {
@@ -53,6 +55,7 @@ impl NutsShell {
                 "security".to_string(),
                 "configure".to_string(),
             ],
+            last_request: None,
         };
         
         // Load API key on startup
@@ -173,6 +176,41 @@ impl NutsShell {
                         .map_err(|_| "ANTHROPIC_API_KEY environment variable not set")?;
                     SecurityCommand::new(&anthropic_api_key).execute(&parts.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).await?;
                 }
+                "collection" => {
+                    match parts.get(1).map(String::as_str) {
+                        Some("new") => {
+                            if let Some(name) = parts.get(2) {
+                                self.create_collection(name)?;
+                            } else {
+                                println!("Usage: collection new <name>");
+                            }
+                        }
+                        Some("run") => {
+                            if let Some(name) = parts.get(2) {
+                                self.run_collection(name).await?;
+                            } else {
+                                println!("Usage: collection run <name>");
+                            }
+                        }
+                        Some("mock") => {
+                            if let Some(name) = parts.get(2) {
+                                self.start_mock_server(name).await?;
+                            } else {
+                                println!("Usage: collection mock <name>");
+                            }
+                        }
+                        _ => println!("Available collection commands: new, run, mock"),
+                    }
+                }
+                "save" => {
+                    if parts.len() >= 3 {
+                        let collection_name = &parts[1];
+                        let endpoint_name = &parts[2];
+                        self.save_last_request_to_collection(collection_name, endpoint_name)?;
+                    } else {
+                        println!("❌ Usage: save <collection_name> <endpoint_name>");
+                    }
+                }
                 _ => {
                     if let Some(suggestion) = self.ai_suggest_command(cmd) {
                         println!("🤖 AI Suggests: {}", style(suggestion).blue());
@@ -189,5 +227,106 @@ impl NutsShell {
         // This would integrate with Claude AI
         // For now, return a mock suggestion
         Some(format!("Did you mean 'nuts call {}' ?", input))
+    }
+
+    fn get_collections_dir() -> PathBuf {
+        let mut path = dirs::home_dir().expect("Could not find home directory");
+        path.push(".nuts");
+        path.push("collections");
+        std::fs::create_dir_all(&path).expect("Could not create collections directory");
+        path
+    }
+
+    fn create_collection(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let mut path = Self::get_collections_dir();
+        path.push(format!("{}.yaml", name));
+        
+        let template = Collection {
+            name: name.to_string(),
+            base_url: "https://api.example.com".to_string(),
+            endpoints: vec![
+                Endpoint {
+                    name: "Example Endpoint".to_string(),
+                    path: "/example".to_string(),
+                    method: "GET".to_string(),
+                    headers: None,
+                    body: None,
+                    tests: None,
+                    mock: None,
+                    perf: None,
+                }
+            ],
+        };
+        
+        template.save(path)?;
+        println!("✅ Created collection: {}", name);
+        Ok(())
+    }
+
+    async fn run_collection(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let mut path = Self::get_collections_dir();
+        path.push(format!("{}.yaml", name));
+        
+        let collection = Collection::load(path)?;
+        println!("Running collection: {}", collection.name);
+        
+        for endpoint in collection.endpoints {
+            println!("Testing endpoint: {}", endpoint.name);
+            // Implement your test logic here
+        }
+        
+        Ok(())
+    }
+
+    async fn start_mock_server(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let mut path = Self::get_collections_dir();
+        path.push(format!("{}.yaml", name));
+        
+        let collection = Collection::load(path)?;
+        println!("Starting mock server for: {}", collection.name);
+        // Implement mock server logic here
+        
+        Ok(())
+    }
+
+    fn store_last_request(&mut self, method: String, url: String, body: Option<String>) {
+        self.last_request = Some((method, url, body));
+    }
+
+    fn save_last_request_to_collection(&self, collection_name: &str, endpoint_name: &str) 
+        -> Result<(), Box<dyn std::error::Error>> 
+    {
+        if let Some((method, url, body)) = &self.last_request {
+            let mut path = Self::get_collections_dir();
+            path.push(format!("{}.yaml", collection_name));
+            
+            let mut collection = if path.exists() {
+                Collection::load(path.clone())?
+            } else {
+                Collection {
+                    name: collection_name.to_string(),
+                    base_url: "".to_string(),
+                    endpoints: Vec::new(),
+                }
+            };
+
+            let endpoint = Endpoint {
+                name: endpoint_name.to_string(),
+                path: url.clone(),
+                method: method.clone(),
+                headers: None,
+                body: body.clone(),
+                tests: None,
+                mock: None,
+                perf: None,
+            };
+
+            collection.endpoints.push(endpoint);
+            collection.save(path)?;
+            println!("✅ Saved endpoint '{}' to collection '{}'", endpoint_name, collection_name);
+        } else {
+            println!("❌ No request to save. Make a call first!");
+        }
+        Ok(())
     }
 }
