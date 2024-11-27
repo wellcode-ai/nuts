@@ -21,6 +21,7 @@ anthropic = "0.0.8"
 tokio = { version = "1.0", features = ["full"] }
 dirs = "5.0"
 serde = { version = "1.0", features = ["derive"] }
+indicatif = "0.17"
 
 [[bin]]
 name = "nuts"

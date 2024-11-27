@@ -4,6 +4,7 @@ use rustyline::Editor;
 use rustyline::history::DefaultHistory;
 use crate::commands::call::CallCommand;
 use crate::commands::security::SecurityCommand;
+use crate::commands::perf::PerfCommand;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -108,7 +109,8 @@ impl NutsShell {
         );
         println!("  {} - Make API calls", style("call").green());
         println!("  {} - Run test collections", style("test").green());
-        println!("  {} - Performance testing", style("perf").green());
+        println!("  {} - Performance testing (e.g., perf URL --users 100 --duration 30s)", 
+            style("perf").green());
         println!("  {} - Start mock server", style("mock").green());
         println!("  {} - Security scanning", style("security").green());
         println!("  {} - Configure API keys", style("configure").green());
@@ -141,8 +143,30 @@ impl NutsShell {
                     }
                 },
                 "exit" | "quit" => std::process::exit(0),
-                "test" | "perf" | "mock" => {
+                "test" | "mock" => {
                     println!("⚠️  {} is comming soon!", style(cmd.trim()).yellow());
+                },
+                "perf" => {
+                    if parts.len() < 2 {
+                        println!("❌ Usage: perf URL [--users N] [--duration Ns]");
+                        return Ok(());
+                    }
+                    
+                    let url = &parts[1];
+                    let users = parts.iter()
+                        .position(|x| x == "--users")
+                        .and_then(|i| parts.get(i + 1))
+                        .and_then(|u| u.parse().ok())
+                        .unwrap_or(10);
+                        
+                    let duration = parts.iter()
+                        .position(|x| x == "--duration")
+                        .and_then(|i| parts.get(i + 1))
+                        .and_then(|d| d.trim_end_matches('s').parse().ok())
+                        .map(|secs| std::time::Duration::from_secs(secs))
+                        .unwrap_or(std::time::Duration::from_secs(30));
+
+                    PerfCommand::new().run(url, users, duration).await?;
                 },
                 "security" => {
                     let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY")
