@@ -1,7 +1,8 @@
 use console::style;
-use reqwest::{blocking::Client, header};
+use reqwest::{header, Client, Response};
 use serde_json::Value;
 use std::error::Error;
+use crate::models::analysis::{ApiAnalysis, CacheAnalysis};
 
 pub struct CallCommand {
     client: Client,
@@ -14,7 +15,7 @@ impl CallCommand {
         }
     }
 
-    pub fn execute(&self, args: &[&str]) -> Result<(), Box<dyn Error>> {
+    pub async fn execute(&self, args: &[&str]) -> Result<(), Box<dyn Error>> {
         // Parse arguments
         let (method, url, body) = self.parse_args(args)?;
         
@@ -42,7 +43,7 @@ impl CallCommand {
         }
 
         // Send request
-        let response = request.send()?;
+        let response = request.send().await?;
         
         // Print status code
         println!("📡 Status: {}", style(response.status()).yellow());
@@ -53,19 +54,25 @@ impl CallCommand {
             println!("  {}: {}", style(key).dim(), value.to_str().unwrap_or(""));
         }
         
+        // Store headers before consuming response
+        let headers = response.headers().clone();
+        
         // Print response body
-        if let Ok(text) = response.text() {
-            println!("\n📦 Response:");
-            // Try to pretty print if it's JSON
-            match serde_json::from_str::<Value>(&text) {
-                Ok(json) => {
-                    println!("{}", style(serde_json::to_string_pretty(&json)?).green());
-                },
-                Err(_) => {
-                    // If it's not JSON, just print as plain text
-                    println!("{}", style(text.trim()).green());
-                }
+        let text = response.text().await?;
+        println!("\n📦 Response:");
+        // Try to pretty print if it's JSON
+        match serde_json::from_str::<Value>(&text) {
+            Ok(json) => {
+                println!("{}", style(serde_json::to_string_pretty(&json)?).green());
+            },
+            Err(_) => {
+                // If it's not JSON, just print as plain text
+                println!("{}", style(text.trim()).green());
             }
+        }
+
+        if args.contains(&"--analyze") {
+            let _ = self.handle_analyze(&headers, &text).await?;
         }
 
         Ok(())
@@ -102,5 +109,172 @@ impl CallCommand {
         };
 
         Ok((method, url, body))
+    }
+    async fn handle_analyze(&self, headers: &header::HeaderMap, body: &str) -> Result<ApiAnalysis, Box<dyn Error>> {
+        let analysis = ApiAnalysis {
+            auth_type: self.detect_auth_type(headers),
+            rate_limit: self.detect_rate_limit(headers),
+            cache_status: self.analyze_cache(headers),
+            recommendations: self.generate_recommendations(headers, body).await,
+        };
+    
+        println!("\n🤖 Analyzing API patterns...");
+        if let Some(auth) = &analysis.auth_type {
+            println!("✓ Authentication: {}", auth);
+        }
+        if let Some(rate) = analysis.rate_limit {
+            println!("✓ Rate limiting: {} req/min", rate);
+        }
+        if analysis.cache_status.cacheable {
+            println!("✓ Caching opportunity identified");
+        }
+        
+        if !analysis.recommendations.is_empty() {
+            println!("\n📝 Recommendations:");
+            for rec in &analysis.recommendations {
+                println!("• {}", rec);
+            }
+        }
+    
+        Ok(analysis)
+    }
+    
+    fn detect_auth_type(&self, headers: &reqwest::header::HeaderMap) -> Option<String> {
+        if headers.contains_key("www-authenticate") {
+            Some("Basic".to_string())
+        } else if let Some(auth) = headers.get("authorization").and_then(|v| v.to_str().ok()) {
+            if auth.starts_with("Bearer") {
+                Some("JWT/Bearer".to_string())
+            } else if auth.starts_with("Basic") {
+                Some("Basic".to_string())
+            } else {
+                Some("Custom".to_string())
+            }
+        } else {
+            None
+        }
+    }
+    
+    fn detect_rate_limit(&self, headers: &reqwest::header::HeaderMap) -> Option<u32> {
+        // Check multiple common rate limit headers
+        headers.get("x-ratelimit-limit")
+            .or(headers.get("ratelimit-limit"))
+            .or(headers.get("x-rate-limit"))
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse().ok())
+    }
+    
+    fn analyze_cache(&self, headers: &reqwest::header::HeaderMap) -> CacheAnalysis {
+        let cache_control = headers
+            .get("cache-control")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        
+        let etag = headers.contains_key("etag");
+        let last_modified = headers.contains_key("last-modified");
+        
+        let mut reason = Vec::new();
+        if etag { reason.push("ETag header present"); }
+        if last_modified { reason.push("Last-Modified header present"); }
+        if !cache_control.is_empty() { reason.push("Cache-Control directive found"); }
+        
+        CacheAnalysis {
+            cacheable: (!cache_control.contains("no-cache") 
+                       && !cache_control.contains("private"))
+                       || etag 
+                       || last_modified,
+            suggested_ttl: if cache_control.contains("max-age=") {
+                cache_control
+                    .split("max-age=")
+                    .nth(1)
+                    .and_then(|s| s.split(',').next())
+                    .and_then(|s| s.parse().ok())
+            } else {
+                Some(3600) // Default 1 hour if no max-age specified
+            },
+            reason: reason.join(", "),
+        }
+    }
+
+    async fn generate_recommendations(&self, headers: &reqwest::header::HeaderMap, body: &str) -> Vec<String> {
+        let mut recommendations = self.generate_basic_recommendations(headers);
+        
+        // Add AI recommendations
+        if let Ok(ai_recommendations) = self.get_ai_recommendations(headers, body).await {
+            recommendations.extend(ai_recommendations);
+        }
+        
+        recommendations
+    }
+
+    // Rename existing recommendations to basic
+    fn generate_basic_recommendations(&self, headers: &reqwest::header::HeaderMap) -> Vec<String> {
+        let mut recommendations = Vec::new();
+        
+        // Rate limiting recommendations
+        if headers.get("x-ratelimit-limit").is_none() {
+            recommendations.push("Consider implementing rate limiting".to_string());
+        }
+        
+        // Security recommendations
+        if !headers.contains_key("x-content-type-options") {
+            recommendations.push("Add X-Content-Type-Options: nosniff header".to_string());
+        }
+        if !headers.contains_key("x-frame-options") {
+            recommendations.push("Consider adding X-Frame-Options header".to_string());
+        }
+        
+        // Cache recommendations
+        if !headers.contains_key("cache-control") {
+            recommendations.push("Add explicit Cache-Control directives".to_string());
+        }
+        
+        // CORS recommendations
+        if headers.contains_key("access-control-allow-origin") {
+            if headers.get("access-control-allow-origin")
+                     .and_then(|v| v.to_str().ok())
+                     .map_or(false, |v| v == "*") {
+                recommendations.push("Consider restricting CORS Access-Control-Allow-Origin".to_string());
+            }
+        }
+        
+        recommendations
+    }
+
+    async fn get_ai_recommendations(&self, headers: &reqwest::header::HeaderMap, body: &str) -> Result<Vec<String>, Box<dyn Error>> {
+        let prompt = format!(
+            "Analyze this API response and provide specific recommendations for improvement. \
+            Headers: {:?}\nBody preview: {}", 
+            headers,
+            &body[..body.len().min(500)] // First 500 chars of body
+        );
+
+        let response = self.client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", std::env::var("ANTHROPIC_API_KEY")?)
+            .header("anthropic-version", "2023-06-01")
+            .json(&serde_json::json!({
+                "model": "claude-3-sonnet-20240229",
+                "max_tokens": 1000,
+                "messages": [{
+                    "role": "user",
+                    "content": prompt
+                }]
+            }))
+            .send()
+            .await?;
+
+        let ai_response: Value = response.json().await?;
+        let content = ai_response["content"][0]["text"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        // Split response into individual recommendations
+        Ok(content
+            .lines()
+            .filter(|line| line.trim().starts_with("-"))
+            .map(|line| line.trim_start_matches('-').trim().to_string())
+            .collect())
     }
 }

@@ -65,6 +65,7 @@ impl NutsShell {
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", self.get_welcome_message());
         
+        // Create a single runtime for the entire application
         let rt = tokio::runtime::Runtime::new()?;
         rt.block_on(async {
             loop {
@@ -72,7 +73,9 @@ impl NutsShell {
                 match readline {
                     Ok(line) => {
                         self.editor.add_history_entry(line.as_str());
-                        self.process_command(&line).await?;
+                        if let Err(e) = self.process_command(&line).await {
+                            println!("❌ Error: {}", e);
+                        }
                     }
                     Err(_) => break,
                 }
@@ -123,7 +126,7 @@ impl NutsShell {
             Some(cmd) => match cmd.as_str() {
                 "call" => {
                     if parts.len() > 1 {
-                        CallCommand::new().execute(&parts.iter().map(|s| s.as_str()).collect::<Vec<&str>>())?;
+                        CallCommand::new().execute(&parts.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).await?;
                     } else {
                         println!("❌ Usage: call [METHOD] URL [JSON_BODY]");
                     }
