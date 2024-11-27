@@ -7,6 +7,20 @@ description = "Nuts CLI tool"
 license = "MIT"
 
 [dependencies]
+ratatui = "0.24.0"
+crossterm = "0.27.0"
+inquire = "0.6.2"
+syntect = "5.1.0"
+console = "0.15.8"
+dialoguer = "0.11.0"
+clap = { version = "4.4", features = ["derive"] }
+rustyline = "12.0.0"
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+serde_json = "1.0"
+anthropic = "0.0.8"
+tokio = { version = "1.0", features = ["full"] }
+dirs = "5.0"
+serde = { version = "1.0", features = ["derive"] }
 
 [[bin]]
 name = "nuts"
