@@ -223,7 +223,14 @@ impl NutsShell {
                                 println!("Usage: collection mock <name>");
                             }
                         }
-                        _ => println!("Available collection commands: new, run, mock"),
+                        Some("perf") => {
+                            if let Some(name) = parts.get(2) {
+                                self.run_collection_perf(name, &parts[2..]).await?;
+                            } else {
+                                println!("Usage: collection perf <name> [--users N] [--duration Ns]");
+                            }
+                        },
+                        _ => println!("Available collection commands: new, run, mock, perf"),
                     }
                 }
                 "save" => {
@@ -351,6 +358,48 @@ impl NutsShell {
         } else {
             println!("❌ No request to save. Make a call first!");
         }
+        Ok(())
+    }
+
+    async fn run_collection_perf(&self, name: &str, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+        let mut path = Self::get_collections_dir();
+        path.push(format!("{}.yaml", name));
+        
+        let collection = Collection::load(path)?;
+        println!("🚀 Running performance tests for collection: {}", collection.name);
+
+        // Parse common arguments
+        let users = args.iter()
+            .position(|x| x == "--users")
+            .and_then(|i| args.get(i + 1))
+            .and_then(|u| u.parse().ok())
+            .unwrap_or(10);
+            
+        let duration = args.iter()
+            .position(|x| x == "--duration")
+            .and_then(|i| args.get(i + 1))
+            .and_then(|d| d.trim_end_matches('s').parse().ok())
+            .map(|secs| std::time::Duration::from_secs(secs))
+            .unwrap_or(std::time::Duration::from_secs(30));
+
+        for endpoint in collection.endpoints {
+            println!("\n📌 Testing endpoint: {}", endpoint.name);
+            
+            let full_url = if endpoint.path.starts_with("http") {
+                endpoint.path
+            } else {
+                format!("{}{}", collection.base_url, endpoint.path)
+            };
+
+            PerfCommand::new().run(
+                &full_url,
+                users,
+                duration,
+                &endpoint.method,
+                endpoint.body.as_deref()
+            ).await?;
+        }
+        
         Ok(())
     }
 }
