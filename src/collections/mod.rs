@@ -18,6 +18,7 @@ pub struct Endpoint {
     pub tests: Option<Vec<Test>>,
     pub mock: Option<MockConfig>,
     pub perf: Option<PerfConfig>,
+    pub mock_data: Option<MockDataConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -42,6 +43,13 @@ pub struct PerfConfig {
     pub users: u32,
     pub duration: String,
     pub ramp_up: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MockDataConfig {
+    pub description: String,
+    pub schema: Option<String>,
+    pub examples: Option<Vec<String>>,
 }
 
 impl Collection {

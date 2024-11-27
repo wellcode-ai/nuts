@@ -7,7 +7,7 @@ description = "Nuts CLI tool"
 license = "MIT"
 
 [dependencies]
-ratatui = "0.24.0"
+ratatui = "0.26.0" 
 crossterm = "0.27.0"
 inquire = "0.6.2"
 syntect = "5.1.0"
@@ -25,6 +25,8 @@ indicatif = "0.17"
 serde_yaml = "0.9"
 tokio-util = "0.7"
 async-trait = "0.1"
+termion = "2.0"
+statistical = "1.0"
 
 [[bin]]
 name = "nuts"

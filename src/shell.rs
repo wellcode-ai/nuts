@@ -8,7 +8,7 @@ use crate::commands::perf::PerfCommand;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use crate::collections::{Collection, Endpoint};
+use crate::collections::{Collection, Endpoint, MockDataConfig};
 
 pub struct NutsShell {
     editor: Editor<NutsCompleter, DefaultHistory>,
@@ -223,6 +223,17 @@ impl NutsShell {
                                 println!("Usage: collection mock <name>");
                             }
                         }
+                        Some("configure_mock_data") => {
+                            if let Some(collection) = parts.get(2) {
+                                if let Some(endpoint) = parts.get(3) {
+                                    self.configure_mock_data(collection, endpoint).await?;
+                                } else {
+                                    println!("Usage: collection configure_mock_data <collection> <endpoint>");
+                                }
+                            } else {
+                                println!("Usage: collection configure_mock_data <collection> <endpoint>");
+                            }
+                        },
                         Some("perf") => {
                             if let Some(name) = parts.get(2) {
                                 self.run_collection_perf(name, &parts[2..]).await?;
@@ -230,7 +241,7 @@ impl NutsShell {
                                 println!("Usage: collection perf <name> [--users N] [--duration Ns]");
                             }
                         },
-                        _ => println!("Available collection commands: new, run, mock, perf"),
+                        _ => println!("Available collection commands: new, run, mock, perf, configure_mock_data"),
                     }
                 }
                 "save" => {
@@ -240,6 +251,15 @@ impl NutsShell {
                         self.save_last_request_to_collection(collection_name, endpoint_name)?;
                     } else {
                         println!("❌ Usage: save <collection_name> <endpoint_name>");
+                    }
+                }
+                "configure_mock_data" => {
+                    if parts.len() >= 3 {
+                        let collection = &parts[1];
+                        let endpoint = &parts[2];
+                        self.configure_mock_data(collection, endpoint).await?;
+                    } else {
+                        println!("❌ Usage: configure_mock_data <collection_name> <endpoint_name>");
                     }
                 }
                 _ => {
@@ -285,6 +305,7 @@ impl NutsShell {
                     tests: None,
                     mock: None,
                     perf: None,
+                    mock_data: None,
                 }
             ],
         };
@@ -350,6 +371,7 @@ impl NutsShell {
                 tests: None,
                 mock: None,
                 perf: None,
+                mock_data: None,
             };
 
             collection.endpoints.push(endpoint);
@@ -383,23 +405,168 @@ impl NutsShell {
             .unwrap_or(std::time::Duration::from_secs(30));
 
         for endpoint in collection.endpoints {
-            println!("\n📌 Testing endpoint: {}", endpoint.name);
-            
-            let full_url = if endpoint.path.starts_with("http") {
-                endpoint.path
-            } else {
-                format!("{}{}", collection.base_url, endpoint.path)
-            };
+            if endpoint.method == "POST" && endpoint.body.is_some() {
+                println!("\n📌 Testing endpoint: {} with AI-generated variations", endpoint.name);
+                
+                let api_key = Self::load_api_key()
+                    .ok_or("Anthropic API key not configured. Use 'configure' command to set it.")?;
 
-            PerfCommand::new().run(
-                &full_url,
-                users,
-                duration,
-                &endpoint.method,
-                endpoint.body.as_deref()
-            ).await?;
+                let original_body = endpoint.body.unwrap();
+                println!("Original body: {}", original_body);
+                println!("🤖 Generating variations using Claude...");
+
+                let prompt = format!(
+                    r#"You are a test data generator focused on edge cases and boundary testing.
+                    Generate 10 different JSON objects similar to this one: {}
+
+                    Include variations that test:
+                    1. Maximum lengths and very short values
+                    2. Special characters (é, ñ, 漢字, емейл, etc.)
+                    3. Spaces, tabs, newlines in strings
+                    4. Empty strings and null values where applicable
+                    5. Numbers: maximum values, minimum values, decimals, zeros
+                    6. Unicode characters and emojis
+                    7. SQL injection patterns
+                    8. XSS patterns
+                    9. HTML tags in strings
+                    10. URL-encoded characters
+
+                    For example, if there's a "name" field, include variations like:
+                    - Very long names (50+ characters)
+                    - Names with special characters
+                    - Names with HTML tags
+                    - Empty names
+                    - Names with only spaces
+                    - Names with emojis
+
+                    Return ONLY a valid JSON array of objects. No explanations or other text."#,
+                    original_body
+                );
+
+                let response = reqwest::Client::new()
+                    .post("https://api.anthropic.com/v1/messages")
+                    .header("x-api-key", &api_key)
+                    .header("anthropic-version", "2023-06-01")
+                    .json(&serde_json::json!({
+                        "model": "claude-3-sonnet-20240229",
+                        "max_tokens": 1000,
+                        "messages": [{
+                            "role": "user",
+                            "content": prompt
+                        }]
+                    }))
+                    .send()
+                    .await?;
+
+                let ai_response: serde_json::Value = response.json().await?;
+                let content = ai_response["content"][0]["text"]
+                    .as_str()
+                    .ok_or("Invalid AI response")?;
+
+                let variations = parse_ai_response(content)?;
+
+                println!("\n📝 Generated variations:");
+                for (i, variation) in variations.iter().enumerate() {
+                    println!("Variation {}: {}", i + 1, variation);
+                }
+
+                let full_url = if endpoint.path.starts_with("http") {
+                    endpoint.path
+                } else {
+                    format!("{}{}", collection.base_url, endpoint.path)
+                };
+
+                PerfCommand::new().run_with_variations(
+                    &full_url,
+                    users,
+                    duration,
+                    &endpoint.method,
+                    &variations
+                ).await?;
+            } else {
+                // Handle GET requests or requests without body as before
+                println!("\n📌 Testing endpoint: {}", endpoint.name);
+                let full_url = if endpoint.path.starts_with("http") {
+                    endpoint.path
+                } else {
+                    format!("{}{}", collection.base_url, endpoint.path)
+                };
+
+                PerfCommand::new().run(
+                    &full_url,
+                    users,
+                    duration,
+                    &endpoint.method,
+                    endpoint.body.as_deref()
+                ).await?;
+            }
         }
         
         Ok(())
     }
+
+    async fn configure_mock_data(&mut self, collection: &str, endpoint: &str) 
+        -> Result<(), Box<dyn std::error::Error>> 
+    {
+        println!("Configuring mock data generation for {}/{}", collection, endpoint);
+        
+        let description = self.editor.readline("Enter data description: ")?;
+        let schema = self.editor.readline("Enter JSON schema (optional): ")?;
+        let example = self.editor.readline("Enter example (optional): ")?;
+
+        let mock_config = MockDataConfig {
+            description,
+            schema: if schema.is_empty() { None } else { Some(schema) },
+            examples: if example.is_empty() { None } else { Some(vec![example]) },
+        };
+
+        let mut path = Self::get_collections_dir();
+        path.push(format!("{}.yaml", collection));
+        let mut collection = Collection::load(path.clone())?;
+        
+        if let Some(endpoint) = collection.endpoints.iter_mut().find(|e| e.name == endpoint) {
+            endpoint.mock_data = Some(mock_config);
+            collection.save(path)?;
+            println!("✅ Mock data configuration saved");
+        }
+
+        Ok(())
+    }
+}
+
+fn parse_ai_response(content: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    // First, try to parse as a direct array of strings
+    if let Ok(variations) = serde_json::from_str::<Vec<String>>(content) {
+        return Ok(variations);
+    }
+
+    // Then try to parse as array of objects and convert to strings
+    if let Ok(variations) = serde_json::from_str::<Vec<serde_json::Value>>(content) {
+        return Ok(variations.into_iter()
+            .map(|v| v.to_string())
+            .collect());
+    }
+
+    // If that fails, try to extract JSON array from the text
+    if let Some(array_content) = content
+        .trim()
+        .trim_matches(|c| c == '`' || c == '"')
+        .trim()
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+    {
+        let variations: Vec<String> = array_content
+            .split("},")
+            .map(|s| {
+                let mut s = s.trim().to_string();
+                if !s.ends_with('}') {
+                    s.push('}');
+                }
+                s
+            })
+            .collect();
+        return Ok(variations);
+    }
+
+    Err("Could not parse AI response into valid JSON variations".into())
 }
