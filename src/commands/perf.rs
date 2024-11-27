@@ -35,6 +35,29 @@ impl PerfCommand {
         let total_latency = Arc::new(AtomicU64::new(0));
         let errors = Arc::new(AtomicUsize::new(0));
 
+        // Progress reporting task
+        let progress_count = request_count.clone();
+        let progress_errors = errors.clone();
+        let progress_latency = total_latency.clone();
+        let progress_handle = tokio::spawn(async move {
+            while start_time.elapsed() < duration {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                let reqs = progress_count.load(Ordering::Relaxed);
+                let errs = progress_errors.load(Ordering::Relaxed);
+                let avg_latency = if reqs > 0 {
+                    progress_latency.load(Ordering::Relaxed) as f64 / reqs as f64
+                } else {
+                    0.0
+                };
+                let rps = reqs as f64 / start_time.elapsed().as_secs_f64();
+                
+                print!("\rRequests: {} | Errors: {} | Avg Latency: {:.1}ms | RPS: {:.1}", 
+                      reqs, errs, avg_latency, rps);
+                std::io::stdout().flush().unwrap();
+            }
+        });
+
+        // Worker tasks
         let mut handles = vec![];
         for _ in 0..users {
             let client = client.clone();
@@ -65,15 +88,13 @@ impl PerfCommand {
                     };
 
                     match result {
-                        Ok(response) => {
+                        Ok(_) => {
                             request_count.fetch_add(1, Ordering::Relaxed);
                             let latency = start.elapsed().as_millis() as u64;
                             total_latency.fetch_add(latency, Ordering::Relaxed);
-                            println!("Response status: {}", response.status());
                         },
-                        Err(e) => {
+                        Err(_) => {
                             errors.fetch_add(1, Ordering::Relaxed);
-                            println!("Error: {}", e);
                         }
                     }
                 }
