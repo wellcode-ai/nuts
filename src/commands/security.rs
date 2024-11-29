@@ -1,10 +1,10 @@
 use console::style;
-use reqwest::{blocking::Client, header};
 use serde_json::Value;
 use std::error::Error;
 use anthropic::client::{Client as AnthropicClient, ClientBuilder};
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 use anthropic::{AI_PROMPT, HUMAN_PROMPT};
+use reqwest::header;
 
 pub struct SecurityCommand {
     http_client: reqwest::Client,

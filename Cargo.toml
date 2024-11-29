@@ -27,6 +27,7 @@ tokio-util = "0.7"
 async-trait = "0.1"
 termion = "2.0"
 statistical = "1.0"
+url = "2.5.0"
 
 [[bin]]
 name = "nuts"

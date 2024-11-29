@@ -15,10 +15,15 @@ impl NutsCompleter {
         Self {
             commands: vec![
                 "call".to_string(),
-                "test".to_string(),
+                "collection new".to_string(),
+                "collection run".to_string(),
+                "collection mock".to_string(),
+                "collection perf".to_string(),
+                "collection configure_mock_data".to_string(),
+                "save".to_string(),
                 "perf".to_string(),
-                "mock".to_string(),
                 "security".to_string(),
+                "configure".to_string(),
                 "help".to_string(),
                 "exit".to_string(),
             ],

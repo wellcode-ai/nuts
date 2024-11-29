@@ -1,5 +1,5 @@
 use console::style;
-use reqwest::{header, Client, Response};
+use reqwest::{header, Client};
 use serde_json::Value;
 use std::error::Error;
 use crate::models::analysis::{ApiAnalysis, CacheAnalysis};

@@ -16,6 +16,7 @@ use ratatui::{
 use statistical::{mean, standard_deviation, median};
 use std::collections::HashMap;
 use std::sync::Mutex;
+
 use crossterm::{
     terminal::{Clear, ClearType},
     ExecutableCommand,
@@ -60,16 +61,16 @@ impl PerfCommand {
         let errors = Arc::new(AtomicUsize::new(0));
 
         // Progress reporting task
-        let progress_count = request_count.clone();
-        let progress_errors = errors.clone();
-        let progress_latency = total_latency.clone();
-        let progress_handle = tokio::spawn(async move {
+        let _progress_count = request_count.clone();
+        let _progress_errors = errors.clone();
+        let _progress_latency = total_latency.clone();
+        let _progress_handle = tokio::spawn(async move {
             while start_time.elapsed() < duration {
                 tokio::time::sleep(Duration::from_secs(1)).await;
-                let reqs = progress_count.load(Ordering::Relaxed);
-                let errs = progress_errors.load(Ordering::Relaxed);
+                let reqs = _progress_count.load(Ordering::Relaxed);
+                let errs = _progress_errors.load(Ordering::Relaxed);
                 let avg_latency = if reqs > 0 {
-                    progress_latency.load(Ordering::Relaxed) as f64 / reqs as f64
+                    _progress_latency.load(Ordering::Relaxed) as f64 / reqs as f64
                 } else {
                     0.0
                 };
@@ -177,14 +178,14 @@ impl PerfCommand {
         let variations = Arc::new(variations.to_vec());
 
         // Progress reporting
-        let progress_count = request_count.clone();
-        let progress_errors = errors.clone();
-        let progress_latency = total_latency.clone();
+        let _progress_count = request_count.clone();
+        let _progress_errors = errors.clone();
+        let _progress_latency = total_latency.clone();
         
         // Replace the metrics_handle spawn with a non-async display update
         let metrics_clone = metrics.clone();
         let running = Arc::new(AtomicBool::new(true));
-        let running_clone = running.clone();
+        let _running_clone = running.clone();
 
         // Spawn worker tasks first
         let mut handles = vec![];
