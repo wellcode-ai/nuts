@@ -5,6 +5,7 @@ use std::fs;
 
 pub mod manager;
 pub use manager::CollectionManager;
+pub mod docs_generator;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OpenAPISpec {
@@ -92,17 +93,14 @@ pub struct Schema {
 }
 
 impl OpenAPISpec {
-    pub fn new(title: &str) -> Self {
-        OpenAPISpec {
+    pub fn new(name: &str) -> Self {
+        Self {
             openapi: "3.0.0".to_string(),
             info: Info {
-                title: title.to_string(),
+                title: name.to_string(),
                 version: "1.0.0".to_string(),
             },
-            servers: vec![Server {
-                url: "http://localhost".to_string(),
-                description: Some("Default server".to_string()),
-            }],
+            servers: Vec::new(),
             paths: HashMap::new(),
         }
     }

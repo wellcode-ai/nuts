@@ -120,8 +120,9 @@ impl NutsShell {
 
         // Collections
         println!("\n{}", style("Collections:").magenta());
-        println!("  {} - Create a new collection", style("collection new <name>").green());
-        println!("  {} - Run all tests in a collection", style("collection run <name>").green());
+        println!("  {} - Create new collection", style("collection new <name>").green());
+        println!("  {} - Run collection", style("collection run <name>").green());
+        println!("  {} - Generate documentation site", style("collection docs <name>").green());
         println!("  {} - Save last API call to a collection", style("save <collection> <endpoint>").green());
         println!("    Example: collection new my-api");
         println!("    Example: save my-api get-users");
@@ -280,7 +281,14 @@ impl NutsShell {
                                 println!("Usage: collection perf <name> [--users N] [--duration Ns]");
                             }
                         },
-                        _ => println!("Available collection commands: new, run, mock, perf, configure_mock_data"),
+                        Some("docs") => {
+                            if let Some(name) = parts.get(2) {
+                                self.collection_manager.generate_docs(name).await?;
+                            } else {
+                                println!("Usage: collection docs <name>");
+                            }
+                        },
+                        _ => println!("Available collection commands: new, run, mock, perf, configure_mock_data, docs"),
                     }
                 }
                 "save" => {

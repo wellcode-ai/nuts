@@ -7,23 +7,28 @@ use std::time::Duration;
 use std::collections::HashMap;
 use url::Url;
 use serde::{Serialize, Deserialize};
-
-#[derive(Debug, Serialize, Deserialize)]
-
+use std::path::Path;
+use crate::collections::docs_generator::DocsGenerator;
+use crate::config::Config;
 
 pub struct CollectionManager {
     collections_dir: PathBuf,
+    config: Config,
 }
 
 impl CollectionManager {
     pub fn new() -> Self {
-        let mut path = dirs::home_dir().expect("Could not find home directory");
-        path.push(".nuts");
-        path.push("collections");
-        fs::create_dir_all(&path).expect("Could not create collections directory");
-        
+        // Create collections directory if it doesn't exist
+        let collections_dir = dirs::home_dir()
+            .map(|h| h.join(".nuts").join("collections"))
+            .expect("Could not determine home directory");
+            
+        std::fs::create_dir_all(&collections_dir)
+            .expect("Failed to create collections directory");
+            
         Self {
-            collections_dir: path,
+            collections_dir: collections_dir,
+            config: Config::new(),
         }
     }
 
@@ -300,6 +305,55 @@ impl CollectionManager {
         }
         
         Ok(())
+    }
+
+    pub async fn generate_docs(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let path = self.get_collection_path(name);
+        println!("Looking for collection at: {:?}", path);
+        
+        println!("Directory contents:");
+        if let Ok(entries) = std::fs::read_dir(&self.collections_dir) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    println!("  {:?}", entry.path());
+                }
+            }
+        }
+        
+        if !path.exists() {
+            println!("File does not exist at: {:?}", path);
+            return Err("Collection file not found".into());
+        }
+        
+        match std::fs::read_to_string(&path) {
+            Ok(content) => {
+                println!("File content length: {} bytes", content.len());
+                println!("File content preview: {}", &content[..content.len().min(100)]);
+                
+                match serde_yaml::from_str::<OpenAPISpec>(&content) {
+                    Ok(spec) => {
+                        let api_key = self.config.get_anthropic_key()?;
+                        let docs_generator = DocsGenerator::new(&api_key);
+                        let output_dir = Path::new("docs").join(name);
+                        
+                        // Create docs directory if it doesn't exist
+                        std::fs::create_dir_all(&output_dir)?;
+                        println!("Created output directory at: {:?}", output_dir);
+                        
+                        docs_generator.generate(&spec, &output_dir).await?;
+                        Ok(())
+                    },
+                    Err(e) => {
+                        println!("Failed to parse YAML: {}", e);
+                        Err(e.into())
+                    }
+                }
+            },
+            Err(e) => {
+                println!("Error reading file: {}", e);
+                Err(e.into())
+            }
+        }
     }
 }
 
