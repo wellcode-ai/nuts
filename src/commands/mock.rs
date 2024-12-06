@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use axum::{
     Router,
     routing::{get, post, put, delete, patch},
-    Json, extract::Path,
+    Json,
     http::StatusCode,
     response::IntoResponse,
 };
@@ -15,7 +15,6 @@ use url;
 use tokio::signal;
 use tower_http::trace::TraceLayer;
 use std::time::Duration;
-use axum::middleware::map_response;
 use axum::response::Response;
 use axum::http::Request;
 use tracing_subscriber::{self, fmt::format::FmtSpan};

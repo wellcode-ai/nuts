@@ -45,7 +45,7 @@ impl NutsShell {
         let completer = NutsCompleter::new();
         editor.set_helper(Some(completer));
         
-        let mut shell = Self {
+        let shell = Self {
             editor,
             history: Vec::new(),
             suggestions: vec![
@@ -80,7 +80,7 @@ impl NutsShell {
                 let readline = self.editor.readline("🥜 nuts> ");
                 match readline {
                     Ok(line) => {
-                        self.editor.add_history_entry(line.as_str());
+                        let _ = self.editor.add_history_entry(line.as_str());
                         if let Err(e) = self.process_command(&line).await {
                             println!("❌ Error: {}", e);
                         }

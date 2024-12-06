@@ -1,11 +1,9 @@
 use console::{style, Term};
-use std::error::Error;
 use anthropic::client::{Client as AnthropicClient, ClientBuilder};
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 
 use reqwest::header;
 use reqwest::Client;
-use std::fmt::Write;
 
 pub struct SecurityCommand {
     api_key: String,

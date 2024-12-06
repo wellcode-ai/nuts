@@ -5,18 +5,15 @@ use std::path::PathBuf;
 use std::fs;
 use std::time::Duration;
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
-use std::path::Path;
 use crate::config::Config;
 use crate::commands::call::CallCommand;
 use crate::commands::mock::MockServer;
-use anthropic::client::{Client as AnthropicClient, ClientBuilder};
+use anthropic::client::ClientBuilder;
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 use console::style;
 
 pub struct CollectionManager {
     collections_dir: PathBuf,
-    config: Config,
 }
 
 impl CollectionManager {
@@ -30,7 +27,6 @@ impl CollectionManager {
             
         Self {
             collections_dir,
-            config: Config::new(),
         }
     }
 
