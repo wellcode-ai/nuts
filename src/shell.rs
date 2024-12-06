@@ -5,7 +5,7 @@ use rustyline::history::DefaultHistory;
 use crate::commands::call::CallCommand;
 use crate::commands::security::SecurityCommand;
 use crate::commands::perf::PerfCommand;
-use crate::collections::CollectionManager;
+use crate::collections::manager::{CollectionManager, Config};
 use std::path::PathBuf;
 use std::fs;
 
@@ -41,33 +41,24 @@ impl NutsShell {
     }
 
     pub fn new() -> Self {
-        let mut editor = Editor::<NutsCompleter, DefaultHistory>::new().unwrap();
-        let completer = NutsCompleter::new();
-        editor.set_helper(Some(completer));
-        
-        let shell = Self {
-            editor,
+        let collections_dir = dirs::home_dir()
+            .map(|h| h.join(".nuts").join("collections"))
+            .expect("Could not determine home directory");
+            
+        std::fs::create_dir_all(&collections_dir)
+            .expect("Failed to create collections directory");
+
+        Self {
+            editor: Editor::new().unwrap(),
             history: Vec::new(),
-            suggestions: vec![
-                "call".to_string(),
-                "perf".to_string(),
-                "mock".to_string(),
-                "security".to_string(),
-                "run".to_string(),
-                "configure".to_string(),
-                "daemon".to_string(),
-            ],
+            suggestions: Vec::new(),
             last_request: None,
             last_response: None,
-            collection_manager: CollectionManager::new(),
-        };
-        
-        // Load API key on startup
-        if let Some(key) = Self::load_api_key() {
-            std::env::set_var("ANTHROPIC_API_KEY", key);
+            collection_manager: CollectionManager::new(
+                collections_dir,
+                Config::default()
+            ),
         }
-        
-        shell
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -441,19 +432,27 @@ impl NutsShell {
                             }
                         },
                         Some("perf") => {
-                            if parts.len() >= 4 {
-                                let collection = &parts[2];
-                                let endpoint = &parts[3];
-                                let options = &parts[4..];
+                            let collection = parts.get(2)
+                                .ok_or("Usage: collection perf <name> [endpoint] [--users N] [--duration Ns]")?;
+                            let endpoint = parts.get(3);
+                            let options = &parts[if endpoint.is_some() { 4 } else { 3 }..];
+                            
+                            if endpoint.is_some() {
                                 println!("🚄 Running performance test for endpoint {} in collection {}", 
-                                    style(endpoint).green(),
+                                    style(endpoint.unwrap()).green(),
                                     style(collection).yellow()
                                 );
-                                self.collection_manager.run_endpoint_perf(collection, endpoint, options).await?;
                             } else {
-                                println!("❌ Usage: collection perf <name> <endpoint> [--users N] [--duration Ns]");
-                                println!("Example: collection perf my-api /users --users 100 --duration 30s");
+                                println!("🚄 Running performance tests for collection {}", 
+                                    style(collection).yellow()
+                                );
                             }
+                            
+                            self.collection_manager.run_endpoint_perf(
+                                collection,
+                                endpoint.map(String::as_str),
+                                options
+                            ).await?;
                         },
                         Some("docs") => {
                             if let Some(name) = parts.get(2) {

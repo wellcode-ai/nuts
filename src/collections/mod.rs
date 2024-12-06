@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::collections::HashMap;
 use std::fs;
 
-mod manager;
+pub mod manager;
 pub use manager::CollectionManager;
 
 #[derive(Debug, Serialize, Deserialize)]

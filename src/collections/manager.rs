@@ -7,25 +7,34 @@ use std::time::Duration;
 use std::collections::HashMap;
 use crate::commands::call::CallCommand;
 use crate::commands::mock::MockServer;
-use anthropic::client::ClientBuilder;
+use anthropic::client::{Client as AnthropicClient, ClientBuilder};
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 use console::style;
 
+#[derive(Default)]
+pub struct Config {
+    pub api_key: Option<String>,
+}
+
 pub struct CollectionManager {
     collections_dir: PathBuf,
+    config: Config,
+    ai_client: AnthropicClient,
 }
 
 impl CollectionManager {
-    pub fn new() -> Self {
-        let collections_dir = dirs::home_dir()
-            .map(|h| h.join(".nuts").join("collections"))
-            .expect("Could not determine home directory");
-            
-        std::fs::create_dir_all(&collections_dir)
-            .expect("Failed to create collections directory");
-            
+    pub fn new(collections_dir: PathBuf, config: Config) -> Self {
+        let api_key = config.api_key.clone()
+            .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+            .unwrap_or_default();
+
         Self {
             collections_dir,
+            config,
+            ai_client: ClientBuilder::default()
+                .api_key(api_key)
+                .build()
+                .unwrap(),
         }
     }
 
@@ -192,7 +201,7 @@ impl CollectionManager {
             // Debug the AI response
             if let Some(ContentBlock::Text { text }) = response.content.first() {
                 println!("AI Response:\n{}", text);  // Debug print
-                let examples = Self::parse_mock_examples(text)?;
+                let examples = Self::parse_mock_examples(&text)?;
                 if examples.is_empty() {
                     println!("⚠️  No valid examples could be parsed from AI response");
                 } else {
@@ -239,25 +248,72 @@ impl CollectionManager {
         Ok(examples)
     }
 
-    pub async fn run_endpoint_perf(
-        &self,
-        collection: &str,
-        endpoint: &str,
-        options: &[String]
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let spec_path = self.get_collection_path(collection);
-        let spec = OpenAPISpec::load(&spec_path)?;
+    async fn generate_user_flow(&self, spec: &OpenAPISpec) -> Result<Vec<(String, String, Option<String>)>, Box<dyn std::error::Error>> {
+        let mut endpoints = Vec::new();
+        for (path, item) in &spec.paths {
+            if let Some(op) = &item.get {
+                endpoints.push(format!("GET {}\nDescription: {}\n", path, op.summary.as_deref().unwrap_or("")));
+            }
+            if let Some(op) = &item.post {
+                endpoints.push(format!("POST {}\nDescription: {}\n", path, op.summary.as_deref().unwrap_or("")));
+            }
+            // Add other methods as needed
+        }
 
-        // Find the endpoint
-        let (path, item) = spec.paths.iter()
-            .find(|(p, _)| p.contains(endpoint))
-            .ok_or("Endpoint not found in collection")?;
+        let prompt = format!(
+            "You are an API testing expert. Analyze these endpoints and create a realistic test flow:\n\
+            \n\
+            Available Endpoints:\n{}\n\
+            Create a sequence of 3-5 API calls that simulates a realistic user journey.\n\
+            Focus on testing core functionality and common user paths.\n\
+            Format each line as: METHOD /path [JSON body] | Brief explanation\n\
+            Example: GET /users | List all users\n\
+            Keep it focused and realistic.",
+            endpoints.join("\n")
+        );
 
-        // Get method and operation
-        let (method, _operation) = item.get_operation()
-            .ok_or("No operation found for endpoint")?;
+        let messages = vec![Message {
+            role: Role::User,
+            content: vec![ContentBlock::Text { text: prompt }],
+        }];
 
-        // Parse options
+        let message_request = MessagesRequestBuilder::default()
+            .messages(messages)
+            .model("claude-3-haiku-20240307".to_string())
+            .max_tokens(800_usize)
+            .build()?;
+
+        let response = self.ai_client.messages(message_request).await?;
+        
+        if let Some(ContentBlock::Text { text }) = response.content.first() {
+            let mut flow = Vec::new();
+            for line in text.lines() {
+                if let Some((call, explanation)) = line.split_once('|') {
+                    let parts: Vec<&str> = call.trim().split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        let method = parts[0].to_string();
+                        let path = parts[1].to_string();
+                        let body = if parts.len() > 2 {
+                            Some(parts[2..].join(" "))
+                        } else {
+                            None
+                        };
+                        println!("   • {} {} | {}", 
+                            style(&method).cyan().to_string(),
+                            style(&path).green().to_string(),
+                            style(explanation.trim()).dim().to_string()
+                        );
+                        flow.push((method, path, body));
+                    }
+                }
+            }
+            Ok(flow)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    async fn parse_options(options: &[String]) -> Result<(u32, Duration), Box<dyn std::error::Error>> {
         let users = options.iter()
             .position(|x| x == "--users")
             .and_then(|i| options.get(i + 1))
@@ -271,20 +327,91 @@ impl CollectionManager {
             .map(Duration::from_secs)
             .unwrap_or(Duration::from_secs(30));
 
-        // Get mock data for request body if available
-        let body = item.mock_data.as_ref()
-            .and_then(|m| m.examples.as_ref())
-            .and_then(|e| e.first())
-            .cloned();
+        Ok((users, duration))
+    }
 
-        // Build full URL
+    pub async fn run_endpoint_perf(
+        &self,
+        collection: &str,
+        endpoint: Option<&str>,
+        options: &[String]
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let spec_path = self.get_collection_path(collection);
+        let spec = OpenAPISpec::load(&spec_path)?;
+        let (users, duration) = Self::parse_options(options).await?;
         let base_url = spec.servers.first()
             .map(|s| s.url.as_str())
-            .unwrap_or("http://localhost:3000");
-        let full_url = format!("{}{}", base_url, path);
+            .unwrap_or("http://localhost:8000");
 
-        PerfCommand::new().run(&full_url, users, duration, method, body.as_deref()).await?;
-        Ok(())
+        // If no specific endpoint is provided, analyze all endpoints
+        if endpoint.is_none() {
+            println!("🔍 Analyzing collection endpoints...");
+            
+            // Try AI flow generation if API key is available
+            if self.config.api_key.is_some() {
+                println!("🤖 Generating realistic test scenarios...\n");
+                if let Ok(flow) = self.generate_user_flow(&spec).await {
+                    if !flow.is_empty() {
+                        let perf = PerfCommand::new();
+                        for (method, path, body) in flow {
+                            println!("\n🚀 Testing {} {}", style(&method).cyan(), style(&path).green());
+                            let url = if path.starts_with("http://") || path.starts_with("https://") {
+                                path.to_string()
+                            } else {
+                                format!("{}{}", &base_url, &path)
+                            };
+                            perf.run(
+                                &url,
+                                users,
+                                duration,
+                                &method,
+                                body.as_deref()
+                            ).await?;
+                        }
+                        return Ok(());
+                    }
+                }
+            }
+
+            // Fallback to testing all GET endpoints
+            println!("ℹ️  Testing all GET endpoints...");
+            let perf = PerfCommand::new();
+            for (path, item) in &spec.paths {
+                if let Some(method) = item.get_operation() {
+                    println!("\n🚀 Testing GET {}", style(path).green());
+                    let url = if path.starts_with("http://") || path.starts_with("https://") {
+                        path.to_string()
+                    } else {
+                        format!("{}{}", &base_url, &path)
+                    };
+                    perf.run(
+                        &url,
+                        users,
+                        duration,
+                        "GET",
+                        None
+                    ).await?;
+                }
+            }
+            return Ok(());
+        }
+
+        // Single endpoint test
+        let endpoint = endpoint.unwrap();
+        let item = spec.paths.iter()
+            .find(|(p, _)| p.contains(endpoint))
+            .ok_or("Endpoint not found in collection")?
+            .1;
+        
+        let (method, _operation) = item.get_operation()
+            .ok_or("No operation found for endpoint")?;
+
+        let url = if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
+            endpoint.to_string()
+        } else {
+            format!("{}{}", base_url, endpoint)
+        };
+        self.run_single_endpoint_test(&url, method, users, duration, base_url).await
     }
 
     pub async fn generate_openapi(
@@ -457,5 +584,30 @@ impl CollectionManager {
         spec.save(&path)?;
         println!("✅ Saved {} {} to collection {}", method, url, collection_name);
         Ok(())
+    }
+
+    // Add a fallback for when AI is not available
+    async fn run_single_endpoint_test(
+        &self,
+        endpoint: &str,
+        method: &str,
+        users: u32,
+        duration: Duration,
+        base_url: &str
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        println!("Running single endpoint test...");
+        let perf = PerfCommand::new();
+        let url = if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
+            endpoint.to_string()
+        } else {
+            format!("{}{}", base_url, endpoint)
+        };
+        perf.run(
+            &url,
+            users,
+            duration,
+            method,
+            None
+        ).await
     }
 }
