@@ -3,9 +3,8 @@ use std::path::PathBuf;
 use std::collections::HashMap;
 use std::fs;
 
-pub mod manager;
+mod manager;
 pub use manager::CollectionManager;
-pub mod docs_generator;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OpenAPISpec {
@@ -19,6 +18,7 @@ pub struct OpenAPISpec {
 pub struct Info {
     pub title: String,
     pub version: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,12 +27,6 @@ pub struct Server {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MockDataConfig {
-    pub description: String,
-    pub schema: Option<String>,
-    pub examples: Option<Vec<String>>,
-}
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PathItem {
     pub get: Option<Operation>,
@@ -45,22 +39,28 @@ pub struct PathItem {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Operation {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub parameters: Option<Vec<Parameter>>,
-    #[serde(rename = "requestBody")]
-    pub requestBody: Option<RequestBody>,
+    #[serde(rename = "requestBody", skip_serializing_if = "Option::is_none")]
+    pub request_body: Option<RequestBody>,
     pub responses: HashMap<String, Response>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub security: Option<Vec<HashMap<String, Vec<String>>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Parameter {
     pub name: String,
-    pub r#in: String,
+    #[serde(rename = "in")]
+    pub in_: String,
     pub description: Option<String>,
-    pub required: Option<bool>,
+    pub required: bool,
     pub schema: Schema,
 }
 
@@ -80,6 +80,7 @@ pub struct MediaType {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Response {
     pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<HashMap<String, MediaType>>,
 }
 
@@ -87,9 +88,19 @@ pub struct Response {
 pub struct Schema {
     #[serde(rename = "type")]
     pub schema_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<HashMap<String, Schema>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub items: Option<Box<Schema>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MockDataConfig {
+    pub description: String,
+    pub schema: Option<String>,
+    pub examples: Option<Vec<String>>,
 }
 
 impl OpenAPISpec {
@@ -99,9 +110,48 @@ impl OpenAPISpec {
             info: Info {
                 title: name.to_string(),
                 version: "1.0.0".to_string(),
+                description: Some(format!("API collection for {}", name)),
             },
-            servers: Vec::new(),
+            servers: vec![Server {
+                url: "http://localhost:3000".to_string(),
+                description: Some("Default server".to_string()),
+            }],
             paths: HashMap::new(),
         }
     }
+
+    pub fn load(path: &PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+        let contents = fs::read_to_string(path)?;
+        let spec = serde_yaml::from_str(&contents)?;
+        Ok(spec)
+    }
+
+    pub fn save(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+        let yaml = serde_yaml::to_string(&self)?;
+        fs::write(path, yaml)?;
+        Ok(())
+    }
 }
+
+impl PathItem {
+    pub fn new() -> Self {
+        Self {
+            get: None,
+            post: None,
+            put: None,
+            delete: None,
+            patch: None,
+            mock_data: None,
+        }
+    }
+
+    pub fn get_operation(&self) -> Option<(&'static str, &Operation)> {
+        if let Some(op) = &self.get { return Some(("GET", op)) }
+        if let Some(op) = &self.post { return Some(("POST", op)) }
+        if let Some(op) = &self.put { return Some(("PUT", op)) }
+        if let Some(op) = &self.delete { return Some(("DELETE", op)) }
+        if let Some(op) = &self.patch { return Some(("PATCH", op)) }
+        None
+    }
+}
+

@@ -1,9 +1,7 @@
-use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering, AtomicUsize, AtomicU64};
-use std::error::Error;
 use std::io::Write;
 use ratatui::{
     backend::CrosstermBackend,
@@ -13,7 +11,7 @@ use ratatui::{
     Terminal,
     prelude::Marker,
 };
-use statistical::{mean, standard_deviation, median};
+use statistical::{standard_deviation, median};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -21,8 +19,6 @@ use crossterm::{
     terminal::{Clear, ClearType},
     ExecutableCommand,
 };
-
-use crate::models::metrics::{Metrics, RequestMetric};
 
 #[derive(Default)]
 struct PerfMetrics {

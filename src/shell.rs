@@ -5,10 +5,9 @@ use rustyline::history::DefaultHistory;
 use crate::commands::call::CallCommand;
 use crate::commands::security::SecurityCommand;
 use crate::commands::perf::PerfCommand;
-use serde::{Deserialize, Serialize};
-use std::fs;
+use crate::collections::CollectionManager;
 use std::path::PathBuf;
-use crate::collections::manager::CollectionManager;
+use std::fs;
 
 pub struct NutsShell {
     editor: Editor<NutsCompleter, DefaultHistory>,
@@ -27,7 +26,7 @@ impl NutsShell {
 
     fn save_api_key(api_key: &str) -> Result<(), Box<dyn std::error::Error>> {
         let config = serde_json::json!({
-            "anthropic_api_key": api_key
+            "anthropic_api_key": api_key.to_string()
         });
         fs::write(Self::get_config_path(), serde_json::to_string_pretty(&config)?)?;
         Ok(())
@@ -50,11 +49,12 @@ impl NutsShell {
             history: Vec::new(),
             suggestions: vec![
                 "call".to_string(),
-                "test".to_string(),
                 "perf".to_string(),
                 "mock".to_string(),
                 "security".to_string(),
+                "run".to_string(),
                 "configure".to_string(),
+                "daemon".to_string(),
             ],
             last_request: None,
             collection_manager: CollectionManager::new(),
@@ -92,11 +92,11 @@ impl NutsShell {
 
     fn get_welcome_message(&self) -> String {
         let ascii_art = r#"
-    ███╗   ██╗██╗   ██╗████████╗███████╗
+    ███╗   ██╗██╗   ██╗███████████████╗
     ████╗  ██║██║   ██║╚══██╔══╝██╔════╝
     ██╔██╗ ██║██║   ██║   ██║   ███████╗
     ██║╚██╗██║██║   ██║   ██║   ╚════██║
-    ██║ ╚████║╚██████╔╝   ██║   ███████║
+    ██║ ╚████║╚█████╔╝   ██║   ███████║
     ╚═╝  ╚═══╝ ╚═════╝    ╚═╝   ╚══════╝
     "#;
 
@@ -109,54 +109,61 @@ impl NutsShell {
     }
 
     fn show_help(&self) {
+        // Title and Version
         println!("\n{}", style("🥜 NUTS - Network Universal Testing Suite").cyan().bold());
-        println!("{}", style("Available Commands:").yellow());
-        
-        // API Calls
-        println!("\n{}", style("API Testing:").magenta());
+        println!("{}\n", style("Version 0.1.0").dim());
+
+        // Quick Start
+        println!("{}", style("🚀 Quick Start:").yellow());
+        println!("  {} - Test an API endpoint", style("call GET https://api.example.com").green());
+        println!("  {} - Run performance test", style("perf GET https://api.example.com").green());
+        println!("  {} - Scan for security issues", style("security https://api.example.com").green());
+        println!("");
+
+        // Core Commands
+        println!("{}", style("🛠️  Core Commands:").yellow());
         println!("  {} - Make API calls", style("call [METHOD] URL [BODY]").green());
-        println!("    Example: call POST https://api.example.com/users '{{\"name\": \"John\"}}'");
-        println!("    Example: call GET https://api.example.com/users");
+        println!("  {} - Run performance tests", style("perf [METHOD] URL [OPTIONS]").green());
+        println!("  {} - Security analysis", style("security [URL]").green());
+        println!("  {} - Start mock server", style("mock [PORT]").green());
+        println!("");
 
-        // Collections
-        println!("\n{}", style("Collections:").magenta());
-        println!("  {} - Create new collection", style("collection new <name>").green());
+        // Collection Management
+        println!("{}", style("📚 Collections:").yellow());
+        println!("  {} - Create collection", style("collection new <name>").green());
         println!("  {} - Run collection", style("collection run <name>").green());
-        println!("  {} - Generate documentation site", style("collection docs <name>").green());
-        println!("  {} - Save last API call to a collection", style("save <collection> <endpoint>").green());
-        println!("    Example: collection new my-api");
-        println!("    Example: save my-api get-users");
+        println!("  {} - Generate docs", style("collection docs <name>").green());
+        println!("  {} - Save last request", style("save <collection> <name>").green());
+        println!("");
 
-        // Performance Testing
-        println!("\n{}", style("Performance Testing:").magenta());
-        println!("  {} - Run performance test on URL", style("perf [METHOD] URL [--users N] [--duration Ns] [BODY]").green());
-        println!("  {} - Run performance test on collection", style("collection perf <name> [--users N] [--duration Ns]").green());
-        println!("    Example: perf GET https://api.example.com/users --users 100 --duration 30s");
-        println!("    Example: collection perf my-api --users 50 --duration 60s");
+        // Performance Options
+        println!("{}", style("🚄 Performance Options:").yellow());
+        println!("  --users N        Number of concurrent users");
+        println!("  --duration Ns    Test duration in seconds");
+        println!("  Example: {} ", style("perf GET api/users --users 100 --duration 30s").dim());
+        println!("");
 
-        // Mocking
-        println!("\n{}", style("Mock Server:").magenta());
-        println!("  {} - Start mock server for collection", style("collection mock <name>").green());
-        println!("  {} - Configure mock data generation", style("collection configure_mock_data <collection> <endpoint>").green());
-        println!("    Example: collection mock my-api");
-        println!("    Example: collection configure_mock_data my-api get-users");
+        // Mock Server
+        println!("{}", style("🎭 Mock Server:").yellow());
+        println!("  {} - Start mock server", style("collection mock <name>").green());
+        println!("  {} - Configure mocks", style("collection configure_mock_data <name> <endpoint>").green());
+        println!("");
 
-        // Security
-        println!("\n{}", style("Security:").magenta());
-        println!("  {} - Run security analysis", style("security [URL]").green());
-        println!("    Example: security https://api.example.com/users");
-
-        // Configuration
-        println!("\n{}", style("Configuration:").magenta());
+        // System Commands
+        println!("{}", style("⚙️  System:").yellow());
         println!("  {} - Configure API keys", style("configure").green());
+        println!("  {} - Manage background service", style("daemon [start|stop|status]").green());
         println!("  {} - Show this help", style("help").green());
-        println!("  {} - Exit the shell", style("exit").green());
+        println!("  {} - Exit NUTS", style("exit").green());
+        println!("");
 
-        println!("\n{}", style("Tips:").blue());
+        // Pro Tips
+        println!("{}", style("💡 Pro Tips:").blue());
         println!("• Use TAB for command completion");
         println!("• Commands are case-insensitive");
-        println!("• Save API calls to collections for reuse");
-        println!("• Configure mock data for automated testing");
+        println!("• Save frequently used calls to collections");
+        println!("• Use --help with any command for detailed options");
+        println!("• Press Ctrl+C to cancel any running operation");
     }
 
     async fn process_command(&mut self, cmd: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -169,18 +176,49 @@ impl NutsShell {
             Some(cmd) => match cmd.as_str() {
                 "call" => {
                     if parts.len() > 1 {
-                        let (method, url, body) = if parts[1].to_uppercase() == "POST" {
-                            ("POST", parts[2].clone(), parts.get(3).cloned())
-                        } else {
-                            ("GET", parts[1].clone(), None)
+                        let (method, url, body) = match parts[1].to_uppercase().as_str() {
+                            "POST" | "PUT" | "PATCH" => {
+                                if parts.len() < 4 {
+                                    println!("❌ Usage: call {} URL JSON_BODY", parts[1].to_uppercase());
+                                    return Ok(());
+                                }
+                                (parts[1].to_uppercase(), parts[2].clone(), parts.get(3).cloned())
+                            },
+                            "DELETE" => {
+                                if parts.len() < 3 {
+                                    println!("❌ Usage: call DELETE URL");
+                                    return Ok(());
+                                }
+                                ("DELETE".to_string(), parts[2].clone(), None)
+                            },
+                            "GET" | "HEAD" | "OPTIONS" => {
+                                if parts.len() < 3 {
+                                    ("GET".to_string(), parts[1].clone(), None)
+                                } else {
+                                    (parts[1].to_uppercase(), parts[2].clone(), None)
+                                }
+                            },
+                            _ => {
+                                // If no method specified, assume GET
+                                ("GET".to_string(), parts[1].clone(), None)
+                            }
                         };
                         
                         // Store the request before executing
-                        self.store_last_request(method.to_string(), url.clone(), body.clone());
+                        self.store_last_request(method.clone(), url.clone(), body.clone());
+                        
+                        // Validate URL format
+                        if !url.starts_with("http://") && !url.starts_with("https://") {
+                            println!("⚠️  Warning: URL should start with http:// or https://");
+                        }
                         
                         CallCommand::new().execute(&parts.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).await?;
                     } else {
                         println!("❌ Usage: call [METHOD] URL [JSON_BODY]");
+                        println!("Supported methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS");
+                        println!("Examples:");
+                        println!("  call GET https://api.example.com/users");
+                        println!("  call POST https://api.example.com/users {{'name': 'John'}}");
                     }
                 }
                 "help" => self.show_help(),
@@ -193,20 +231,46 @@ impl NutsShell {
                     }
                 },
                 "exit" | "quit" => std::process::exit(0),
-                "test" | "mock" => {
-                    println!("⚠️  {} is comming soon!", style(cmd.trim()).yellow());
-                },
                 "perf" => {
                     if parts.len() < 2 {
                         println!("❌ Usage: perf [METHOD] URL [--users N] [--duration Ns] [BODY]");
+                        println!("Supported methods: GET, POST, PUT, PATCH, DELETE");
+                        println!("Example: perf GET https://api.example.com --users 100 --duration 30s");
                         return Ok(());
                     }
                     
-                    let (method, url) = if parts[1].to_uppercase() == "POST" {
-                        ("POST", &parts[2])
-                    } else {
-                        ("GET", &parts[1])
+                    let (method, url) = match parts[1].to_uppercase().as_str() {
+                        "POST" | "PUT" | "PATCH" => {
+                            if parts.len() < 3 {
+                                println!("❌ Usage: perf {} URL [OPTIONS] JSON_BODY", parts[1].to_uppercase());
+                                return Ok(());
+                            }
+                            (parts[1].to_uppercase(), &parts[2])
+                        },
+                        "DELETE" => {
+                            if parts.len() < 3 {
+                                println!("❌ Usage: perf DELETE URL [OPTIONS]");
+                                return Ok(());
+                            }
+                            ("DELETE".to_string(), &parts[2])
+                        },
+                        "GET" | "HEAD" | "OPTIONS" => {
+                            if parts.len() < 3 {
+                                ("GET".to_string(), &parts[1])
+                            } else {
+                                (parts[1].to_uppercase(), &parts[2])
+                            }
+                        },
+                        _ => {
+                            // If no method specified, assume GET
+                            ("GET".to_string(), &parts[1])
+                        }
                     };
+                    
+                    // Validate URL format
+                    if !url.starts_with("http://") && !url.starts_with("https://") {
+                        println!("⚠️  Warning: URL should start with http:// or https://");
+                    }
                     
                     let users = parts.iter()
                         .position(|x| x == "--users")
@@ -222,73 +286,207 @@ impl NutsShell {
                         .unwrap_or(std::time::Duration::from_secs(30));
 
                     // Find body if present (after all flags)
-                    let body = if method == "POST" {
-                        parts.iter()
-                            .skip_while(|&p| p == "--users" || p == "--duration" || p.ends_with('s') || p.parse::<u32>().is_ok())
-                            .last()
-                            .map(String::as_str)
-                    } else {
-                        None
+                    let body = match method.as_str() {
+                        "POST" | "PUT" | "PATCH" => {
+                            parts.iter()
+                                .skip_while(|&p| {
+                                    p == "--users" || p == "--duration" || 
+                                    p.ends_with('s') || p.parse::<u32>().is_ok() ||
+                                    p == &method || p == url
+                                })
+                                .last()
+                                .map(String::as_str)
+                        },
+                        _ => None
                     };
 
-                    PerfCommand::new().run(url, users, duration, method, body).await?;
+                    PerfCommand::new().run(url, users, duration, &method, body).await?;
                 },
                 "security" => {
-                    let anthropic_api_key = std::env::var("ANTHROPIC_API_KEY")
-                        .map_err(|_| "ANTHROPIC_API_KEY environment variable not set")?;
-                    SecurityCommand::new(&anthropic_api_key).execute(&parts.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).await?;
-                }
+                    if parts.len() < 2 {
+                        println!("❌ Usage: security URL [OPTIONS]");
+                        println!("Options:");
+                        println!("  --deep        Perform deep scan (more thorough but slower)");
+                        println!("  --auth TOKEN  Include authorization header for authenticated endpoints");
+                        println!("  --save FILE   Save report to specified file");
+                        println!("Examples:");
+                        println!("  security https://api.example.com");
+                        println!("  security https://api.example.com --deep --auth Bearer_token");
+                        return Ok(());
+                    }
+
+                    let url = &parts[1];
+                    
+                    // Validate URL format
+                    if !url.starts_with("http://") && !url.starts_with("https://") {
+                        println!("⚠️  Warning: URL should start with http:// or https://");
+                    }
+
+                    // Check for API key before starting scan
+                    let anthropic_api_key = match std::env::var("ANTHROPIC_API_KEY") {
+                        Ok(key) => key,
+                        Err(_) => {
+                            println!("❌ ANTHROPIC_API_KEY not found");
+                            println!("💡 Configure your API key using the 'configure' command");
+                            return Ok(());
+                        }
+                    };
+
+                    // Parse options
+                    let deep_scan = parts.contains(&"--deep".to_string());
+                    let auth_token = parts.iter()
+                        .position(|x| x == "--auth")
+                        .and_then(|i| parts.get(i + 1))
+                        .map(|s| s.to_string());
+                    let save_file = parts.iter()
+                        .position(|x| x == "--save")
+                        .and_then(|i| parts.get(i + 1))
+                        .map(|s| s.to_string());
+
+                    println!("🔒 Starting security scan...");
+                    if deep_scan {
+                        println!("📋 Deep scan enabled - this may take a few minutes");
+                    }
+
+                    SecurityCommand::new(&anthropic_api_key)
+                        .with_deep_scan(deep_scan)
+                        .with_auth(auth_token)
+                        .with_save_file(save_file)
+                        .execute(&parts.iter().map(|s| s.to_string()).collect::<Vec<String>>())
+                        .await?;
+                },
                 "collection" => {
                     match parts.get(1).map(String::as_str) {
                         Some("new") => {
                             if let Some(name) = parts.get(2) {
+                                println!("🔨 Creating new OpenAPI collection: {}", style(name).cyan());
                                 self.collection_manager.create_collection(name)?;
+                                println!("✅ Collection created. Use 'collection add {}' to add endpoints", name);
                             } else {
-                                println!("Usage: collection new <name>");
+                                println!("❌ Usage: collection new <name>");
+                                println!("Creates a new OpenAPI specification collection");
+                            }
+                        }
+                        Some("add") => {
+                            if parts.len() >= 4 {
+                                let collection = &parts[2];
+                                let method = parts[3].to_uppercase();
+                                let path = parts.get(4).map(|s| s.to_string());
+                                
+                                match (method.as_str(), path) {
+                                    (m @ ("GET"|"POST"|"PUT"|"DELETE"|"PATCH"), Some(p)) => {
+                                        println!("📝 Adding {} endpoint {} to collection {}", 
+                                            style(m).cyan(),
+                                            style(&p).green(),
+                                            style(collection).yellow()
+                                        );
+                                        self.collection_manager.add_endpoint(collection, m, &p).await?;
+                                    },
+                                    _ => {
+                                        println!("❌ Usage: collection add <name> <METHOD> <path>");
+                                        println!("Example: collection add my-api GET /users");
+                                        println!("Supported methods: GET, POST, PUT, DELETE, PATCH");
+                                    }
+                                }
+                            } else {
+                                println!("❌ Usage: collection add <name> <METHOD> <path>");
                             }
                         }
                         Some("run") => {
-                            if let Some(name) = parts.get(2) {
-                                self.collection_manager.run_collection(name).await?;
+                            if parts.len() >= 4 {
+                                let collection = &parts[2];
+                                let endpoint = &parts[3];
+                                let args = &parts[4..];
+                                println!("🚀 Running endpoint {} from collection {}", 
+                                    style(endpoint).green(),
+                                    style(collection).yellow()
+                                );
+                                self.collection_manager.run_endpoint(collection, endpoint, args).await?;
                             } else {
-                                println!("Usage: collection run <name>");
+                                println!("❌ Usage: collection run <name> <endpoint> [args...]");
+                                println!("Example: collection run my-api /users --data '{{\"name\": \"test\"}}'");
                             }
                         }
                         Some("mock") => {
                             if let Some(name) = parts.get(2) {
-                                self.collection_manager.start_mock_server(name).await?;
+                                let port = parts.get(3)
+                                    .and_then(|p| p.parse().ok())
+                                    .unwrap_or(3000);
+                                println!("🎭 Starting mock server for collection {} on port {}", 
+                                    style(name).yellow(),
+                                    style(port).cyan()
+                                );
+                                self.collection_manager.start_mock_server(name, port).await?;
                             } else {
-                                println!("Usage: collection mock <name>");
+                                println!("❌ Usage: collection mock <name> [port]");
+                                println!("Starts a mock server based on OpenAPI specification");
                             }
                         }
                         Some("configure_mock_data") => {
-                            if parts.len() >= 3 {
-                                let collection = &parts[1];
-                                let endpoint = &parts[2];
+                            if parts.len() >= 4 {
+                                let collection = &parts[2];
+                                let endpoint = &parts[3];
+                                println!("⚙️  Configuring mock data for endpoint {} in collection {}", 
+                                    style(endpoint).green(),
+                                    style(collection).yellow()
+                                );
                                 self.collection_manager.configure_mock_data(
                                     collection, 
                                     endpoint,
                                     &mut self.editor
                                 ).await?;
                             } else {
-                                println!("❌ Usage: configure_mock_data <collection_name> <endpoint_name>");
+                                println!("❌ Usage: collection configure_mock_data <name> <endpoint>");
+                                println!("Example: collection configure_mock_data my-api /users");
                             }
                         },
                         Some("perf") => {
-                            if let Some(name) = parts.get(2) {
-                                self.collection_manager.run_collection_perf(name, &parts[2..]).await?;
+                            if parts.len() >= 4 {
+                                let collection = &parts[2];
+                                let endpoint = &parts[3];
+                                let options = &parts[4..];
+                                println!("🚄 Running performance test for endpoint {} in collection {}", 
+                                    style(endpoint).green(),
+                                    style(collection).yellow()
+                                );
+                                self.collection_manager.run_endpoint_perf(collection, endpoint, options).await?;
                             } else {
-                                println!("Usage: collection perf <name> [--users N] [--duration Ns]");
+                                println!("❌ Usage: collection perf <name> <endpoint> [--users N] [--duration Ns]");
+                                println!("Example: collection perf my-api /users --users 100 --duration 30s");
                             }
                         },
                         Some("docs") => {
                             if let Some(name) = parts.get(2) {
-                                self.collection_manager.generate_docs(name).await?;
+                                let format = parts.get(3).map(String::as_str).unwrap_or("yaml");
+                                match format {
+                                    "yaml" | "json" => {
+                                        println!("📚 Generating OpenAPI documentation for collection {}", 
+                                            style(name).yellow()
+                                        );
+                                        self.collection_manager.generate_openapi(name, format).await?;
+                                    },
+                                    _ => println!("❌ Supported formats: yaml, json")
+                                }
                             } else {
-                                println!("Usage: collection docs <name>");
+                                println!("❌ Usage: collection docs <name> [format]");
+                                println!("Generates OpenAPI documentation (yaml or json)");
                             }
                         },
-                        _ => println!("Available collection commands: new, run, mock, perf, configure_mock_data, docs"),
+                        Some("list") => {
+                            println!("📋 Available collections:");
+                            self.collection_manager.list_collections().await?;
+                        },
+                        _ => {
+                            println!("Available collection commands:");
+                            println!("  {} - Create new collection", style("new <name>").green());
+                            println!("  {} - Add endpoint to collection", style("add <name> <METHOD> <path>").green());
+                            println!("  {} - Run specific endpoint", style("run <name> <endpoint> [args...]").green());
+                            println!("  {} - Start mock server", style("mock <name> [port]").green());
+                            println!("  {} - Configure mock responses", style("configure_mock_data <name> <endpoint>").green());
+                            println!("  {} - Run performance tests", style("perf <name> <endpoint> [options]").green());
+                            println!("  {} - Generate OpenAPI docs", style("docs <name> [format]").green());
+                            println!("  {} - List all collections", style("list").green());
+                        }
                     }
                 }
                 "save" => {
@@ -321,6 +519,14 @@ impl NutsShell {
                         println!("❌ Usage: configure_mock_data <collection_name> <endpoint_name>");
                     }
                 }
+                "daemon" => {
+                    match parts.get(1).map(String::as_str) {
+                        Some("start") => println!("Starting NUTS daemon..."),
+                        Some("stop") => println!("Stopping NUTS daemon..."),
+                        Some("status") => println!("NUTS daemon status: Not running"),
+                        _ => println!("Usage: daemon [start|stop|status]"),
+                    }
+                },
                 _ => {
                     if let Some(suggestion) = self.ai_suggest_command(cmd) {
                         println!("🤖 AI Suggests: {}", style(suggestion).blue());

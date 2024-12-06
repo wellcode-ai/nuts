@@ -1,15 +1,15 @@
-use crate::collections::*;  // Import all types from collections
+use crate::collections::*;
 use crate::commands::perf::PerfCommand;
 use rustyline::Editor;
 use std::path::PathBuf;
 use std::fs;
 use std::time::Duration;
 use std::collections::HashMap;
-use url::Url;
 use serde::{Serialize, Deserialize};
 use std::path::Path;
-use crate::collections::docs_generator::DocsGenerator;
 use crate::config::Config;
+use crate::commands::call::CallCommand;
+use crate::commands::mock::MockServer;
 
 pub struct CollectionManager {
     collections_dir: PathBuf,
@@ -18,7 +18,6 @@ pub struct CollectionManager {
 
 impl CollectionManager {
     pub fn new() -> Self {
-        // Create collections directory if it doesn't exist
         let collections_dir = dirs::home_dir()
             .map(|h| h.join(".nuts").join("collections"))
             .expect("Could not determine home directory");
@@ -27,34 +26,231 @@ impl CollectionManager {
             .expect("Failed to create collections directory");
             
         Self {
-            collections_dir: collections_dir,
+            collections_dir,
             config: Config::new(),
         }
     }
 
     fn get_collection_path(&self, name: &str) -> PathBuf {
-        let mut path = self.collections_dir.clone();
-        path.push(format!("{}.yaml", name));
-        path
+        self.collections_dir.join(format!("{}.yaml", name))
     }
 
     pub fn create_collection(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
         let path = self.get_collection_path(name);
         
-        let template = OpenAPISpec::new(&name);
+        let template = OpenAPISpec::new(name);
+        template.save(&path)?;
         
-        template.save(path)?;
-        println!("✅ Created collection: {}", name);
+        println!("✅ Created OpenAPI collection at: {}", path.display());
         Ok(())
     }
 
-    pub async fn run_collection(&self, _name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Not implemented yet");
+    pub async fn add_endpoint(
+        &self,
+        collection: &str,
+        method: &str,
+        path: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let spec_path = self.get_collection_path(collection);
+        let mut spec = OpenAPISpec::load(&spec_path)?;
+
+        // Create new path item or get existing one
+        let path_item = spec.paths.entry(path.to_string()).or_insert(PathItem::new());
+
+        // Create operation
+        let operation = Operation {
+            summary: Some(format!("{} {}", method, path)),
+            description: Some("Added via NUTS CLI".to_string()),
+            parameters: None,
+            request_body: None,
+            responses: {
+                let mut responses = HashMap::new();
+                responses.insert("200".to_string(), Response {
+                    description: "Successful response".to_string(),
+                    content: None,
+                });
+                responses
+            },
+            security: None,
+            tags: Some(vec![path.split('/').nth(1).unwrap_or("default").to_string()]),
+        };
+
+        // Add operation to path item
+        match method {
+            "GET" => path_item.get = Some(operation),
+            "POST" => path_item.post = Some(operation),
+            "PUT" => path_item.put = Some(operation),
+            "DELETE" => path_item.delete = Some(operation),
+            "PATCH" => path_item.patch = Some(operation),
+            _ => return Err("Unsupported HTTP method".into()),
+        }
+
+        spec.save(&spec_path)?;
+        println!("✅ Added {} endpoint {} to collection", method, path);
         Ok(())
     }
 
-    pub async fn start_mock_server(&self, _name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Not implemented yet");
+    pub async fn run_endpoint(
+        &self,
+        collection: &str,
+        endpoint: &str,
+        args: &[String]
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let spec_path = self.get_collection_path(collection);
+        let spec = OpenAPISpec::load(&spec_path)?;
+
+        // Find the endpoint in the spec
+        let (path, item) = spec.paths.iter()
+            .find(|(p, _)| p.contains(endpoint))
+            .ok_or("Endpoint not found in collection")?;
+
+        // Determine method and operation
+        let (method, operation) = item.get_operation()
+            .ok_or("No operation found for endpoint")?;
+
+        // Build the full URL
+        let base_url = spec.servers.first()
+            .map(|s| s.url.as_str())
+            .unwrap_or("http://localhost:3000");
+        let full_url = format!("{}{}", base_url, path);
+
+        // Execute the request
+        println!(" Executing {} {}", method, full_url);
+        CallCommand::new().execute(&[method, &full_url]).await?;
+        Ok(())
+    }
+
+    pub async fn start_mock_server(
+        &self,
+        name: &str,
+        port: u16
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let spec_path = self.get_collection_path(name);
+        let spec = OpenAPISpec::load(&spec_path)?;
+        
+        println!("Starting mock server for {} on port {}", name, port);
+        MockServer::new(spec, port).start().await?;
+        Ok(())
+    }
+
+    pub async fn configure_mock_data(
+        &self,
+        collection: &str,
+        endpoint: &str,
+        editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let spec_path = self.get_collection_path(collection);
+        let mut spec = OpenAPISpec::load(&spec_path)?;
+
+        // Find and update the endpoint
+        if let Some((_path, item)) = spec.paths.iter_mut().find(|(p, _)| p.contains(endpoint)) {
+            println!("Configuring mock data for endpoint");
+            
+            let description = editor.readline("Enter mock data description: ")?;
+            let example = editor.readline("Enter example response (JSON): ")?;
+
+            let mock_config = MockDataConfig {
+                description,
+                schema: None, // Auto-generate from example
+                examples: Some(vec![example]),
+            };
+
+            item.mock_data = Some(mock_config);
+            spec.save(&spec_path)?;
+            println!("✅ Mock data configured successfully");
+        } else {
+            println!("❌ Endpoint not found in collection");
+        }
+
+        Ok(())
+    }
+
+    pub async fn run_endpoint_perf(
+        &self,
+        collection: &str,
+        endpoint: &str,
+        options: &[String]
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let spec_path = self.get_collection_path(collection);
+        let spec = OpenAPISpec::load(&spec_path)?;
+
+        // Find the endpoint
+        let (path, item) = spec.paths.iter()
+            .find(|(p, _)| p.contains(endpoint))
+            .ok_or("Endpoint not found in collection")?;
+
+        // Get method and operation
+        let (method, operation) = item.get_operation()
+            .ok_or("No operation found for endpoint")?;
+
+        // Parse options
+        let users = options.iter()
+            .position(|x| x == "--users")
+            .and_then(|i| options.get(i + 1))
+            .and_then(|u| u.parse().ok())
+            .unwrap_or(10);
+
+        let duration = options.iter()
+            .position(|x| x == "--duration")
+            .and_then(|i| options.get(i + 1))
+            .and_then(|d| d.trim_end_matches('s').parse().ok())
+            .map(Duration::from_secs)
+            .unwrap_or(Duration::from_secs(30));
+
+        // Get mock data for request body if available
+        let body = item.mock_data.as_ref()
+            .and_then(|m| m.examples.as_ref())
+            .and_then(|e| e.first())
+            .cloned();
+
+        // Build full URL
+        let base_url = spec.servers.first()
+            .map(|s| s.url.as_str())
+            .unwrap_or("http://localhost:3000");
+        let full_url = format!("{}{}", base_url, path);
+
+        PerfCommand::new().run(&full_url, users, duration, method, body.as_deref()).await?;
+        Ok(())
+    }
+
+    pub async fn generate_openapi(
+        &self,
+        name: &str,
+        format: &str
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let spec_path = self.get_collection_path(name);
+        let spec = OpenAPISpec::load(&spec_path)?;
+
+        let output_path = match format {
+            "json" => self.collections_dir.join(format!("{}.json", name)),
+            _ => spec_path.clone(),
+        };
+
+        match format {
+            "json" => {
+                let json = serde_json::to_string_pretty(&spec)?;
+                fs::write(&output_path, json)?;
+            },
+            "yaml" => {
+                let yaml = serde_yaml::to_string(&spec)?;
+                fs::write(&output_path, yaml)?;
+            },
+            _ => return Err("Unsupported format".into()),
+        }
+
+        println!("✅ Generated OpenAPI documentation: {}", output_path.display());
+        Ok(())
+    }
+
+    pub async fn list_collections(&self) -> Result<(), Box<dyn std::error::Error>> {
+        for entry in fs::read_dir(&self.collections_dir)? {
+            let entry = entry?;
+            if let Some(name) = entry.path().file_stem() {
+                if let Some(name_str) = name.to_str() {
+                    println!("  • {}", name_str);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -68,45 +264,36 @@ impl CollectionManager {
         let path = self.get_collection_path(collection_name);
         
         let mut spec = if path.exists() {
-            OpenAPISpec::load(path.clone())?
+            OpenAPISpec::load(&path)?
         } else {
             OpenAPISpec::new(collection_name)
         };
 
-        // Parse URL to get path and server
-        let url_parsed = Url::parse(url)?;
-        let server_url = format!("{}://{}", url_parsed.scheme(), url_parsed.host_str().unwrap_or(""));
-        let path_str = url_parsed.path().to_string();
-
-        // Update servers if needed
-        if !spec.servers.iter().any(|s| s.url == server_url) {
-            spec.servers.push(Server {
-                url: server_url,
-                description: Some("Added by NUTS".to_string()),
-            });
-        }
-
+        // Add the endpoint to the spec
+        let path_item = spec.paths.entry(url.clone()).or_insert(PathItem::new());
+        
         // Create operation
         let operation = Operation {
             summary: Some(endpoint_name.to_string()),
-            description: Some(format!("Generated by NUTS from {} request", method)),
+            description: Some(format!("Generated from {} request", method)),
             parameters: None,
-            requestBody: if let Some(body_str) = body {
-                Some(RequestBody {
-                    description: Some("Request body".to_string()),
-                    required: Some(true),
-                    content: {
-                        let mut content = HashMap::new();
-                        content.insert("application/json".to_string(), MediaType {
-                            schema: self.infer_schema_from_json(body_str)?,
-                            example: Some(serde_json::from_str(body_str)?),
-                        });
-                        content
-                    },
-                })
-            } else {
-                None
-            },
+            request_body: body.as_ref().map(|b| RequestBody {
+                description: Some("Request body".to_string()),
+                required: Some(true),
+                content: {
+                    let mut content = HashMap::new();
+                    content.insert("application/json".to_string(), MediaType {
+                        schema: Schema {
+                            schema_type: "object".to_string(),
+                            format: None,
+                            properties: None,
+                            items: None,
+                        },
+                        example: serde_json::from_str(b).ok(),
+                    });
+                    content
+                },
+            }),
             responses: {
                 let mut responses = HashMap::new();
                 responses.insert("200".to_string(), Response {
@@ -119,18 +306,8 @@ impl CollectionManager {
             tags: Some(vec![endpoint_name.to_string()]),
         };
 
-        // Add path
-        let path_item = spec.paths.entry(path_str).or_insert(PathItem {
-            get: None,
-            post: None,
-            put: None,
-            delete: None,
-            patch: None,
-            mock_data: None,
-        });
-
-        // Update operation based on method
-        match method.to_uppercase().as_str() {
+        // Add operation based on method
+        match method.as_str() {
             "GET" => path_item.get = Some(operation),
             "POST" => path_item.post = Some(operation),
             "PUT" => path_item.put = Some(operation),
@@ -139,234 +316,8 @@ impl CollectionManager {
             _ => return Err("Unsupported HTTP method".into()),
         }
 
-        // Save the updated spec
-        spec.save(path)?;
-        println!("✅ Saved endpoint '{}' to OpenAPI collection '{}'", endpoint_name, collection_name);
-        
-        Ok(())
-    }
-
-    fn infer_schema_from_json(&self, json_str: &str) -> Result<Schema, Box<dyn std::error::Error>> {
-        let value: serde_json::Value = serde_json::from_str(json_str)?;
-        Ok(match value {
-            serde_json::Value::Object(map) => {
-                let mut properties = HashMap::new();
-                for (key, value) in map {
-                    properties.insert(key, self.infer_schema_from_value(&value));
-                }
-                Schema {
-                    schema_type: "string".to_string(),
-                    format: None,
-                    properties: Some(properties),
-                    items: None,
-                }
-            },
-            _ => self.infer_schema_from_value(&value),
-        })
-    }
-
-    fn infer_schema_from_value(&self, value: &serde_json::Value) -> Schema {
-        match value {
-            serde_json::Value::String(_) => Schema {
-                schema_type: "string".to_string(),
-                format: None,
-                properties: None,
-                items: None,
-            },
-            serde_json::Value::Number(n) => Schema {
-                schema_type: if n.is_i64() { "integer" } else { "number" }.to_string(),
-                format: None,
-                properties: None,
-                items: None,
-            },
-            serde_json::Value::Bool(_) => Schema {
-                schema_type: "boolean".to_string(),
-                format: None,
-                properties: None,
-                items: None,
-            },
-            serde_json::Value::Array(arr) => Schema {
-                schema_type: "array".to_string(),
-                format: None,
-                properties: None,
-                items: Some(Box::new(if let Some(first) = arr.first() {
-                    self.infer_schema_from_value(first)
-                } else {
-                    Schema {
-                        schema_type: "string".to_string(),
-                        format: None,
-                        properties: None,
-                        items: None,
-                    }
-                })),
-            },
-            serde_json::Value::Null => Schema {
-                schema_type: "string".to_string(),
-                format: None,
-                properties: None,
-                items: None,
-            },
-            _ => Schema {
-                schema_type: "string".to_string(),
-                format: None,
-                properties: None,
-                items: None,
-            },
-        }
-    }
-
-    pub async fn configure_mock_data(
-        &self,
-        collection: &str,
-        endpoint: &str,
-        editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Configuring mock data generation for {}/{}", collection, endpoint);
-        
-        let description = editor.readline("Enter data description: ")?;
-        let schema = editor.readline("Enter JSON schema (optional): ")?;
-        let example = editor.readline("Enter example (optional): ")?;
-
-        let mock_config = MockDataConfig {
-            description,
-            schema: if schema.is_empty() { None } else { Some(schema) },
-            examples: if example.is_empty() { None } else { Some(vec![example]) },
-        };
-
-        let path = self.get_collection_path(collection);
-        let mut collection = OpenAPISpec::load(path.clone())?;
-        
-        if let Some((path_str, item)) = collection.paths.iter_mut().find(|(path, _)| path.contains(endpoint)) {
-            item.mock_data = Some(mock_config);
-            collection.save(path)?;
-            println!("✅ Mock data configuration saved");
-        }
-
-        Ok(())
-    }
-
-    pub async fn run_collection_perf(
-        &self,
-        name: &str,
-        args: &[String]
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let path = self.get_collection_path(name);
-        let collection = OpenAPISpec::load(path)?;
-        println!("🚀 Running performance tests for collection: {}", collection.info.title);
-
-        // Parse common arguments
-        let users = args.iter()
-            .position(|x| x == "--users")
-            .and_then(|i| args.get(i + 1))
-            .and_then(|u| u.parse().ok())
-            .unwrap_or(10);
-            
-        let duration = args.iter()
-            .position(|x| x == "--duration")
-            .and_then(|i| args.get(i + 1))
-            .and_then(|d| d.trim_end_matches('s').parse().ok())
-            .map(|secs| Duration::from_secs(secs))
-            .unwrap_or(Duration::from_secs(30));
-
-        for (path_str, item) in collection.paths {
-            let full_url = if path_str.starts_with("http") {
-                path_str
-            } else {
-                format!("{}{}", collection.servers[0].url, path_str)
-            };
-
-            let method = if item.get.is_some() { "GET" }
-                else if item.post.is_some() { "POST" }
-                else if item.put.is_some() { "PUT" }
-                else if item.delete.is_some() { "DELETE" }
-                else if item.patch.is_some() { "PATCH" }
-                else { return Err("No HTTP method defined for path".into()) };
-
-            let operation = if item.get.is_some() { &item.get }
-                else if item.post.is_some() { &item.post }
-                else if item.put.is_some() { &item.put }
-                else if item.delete.is_some() { &item.delete }
-                else if item.patch.is_some() { &item.patch }
-                else { return Err("No HTTP method defined for path".into()) };
-
-            PerfCommand::new().run(
-                &full_url,
-                users,
-                duration,
-                method,
-                operation
-                    .as_ref()
-                    .and_then(|op| op.requestBody.as_ref())
-                    .and_then(|body| body.content.get("application/json"))
-                    .and_then(|media| media.example.as_ref())
-                    .map(|ex| ex.to_string())
-                    .as_deref()
-            ).await?;
-        }
-        
-        Ok(())
-    }
-
-    pub async fn generate_docs(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let path = self.get_collection_path(name);
-        println!("Looking for collection at: {:?}", path);
-        
-        println!("Directory contents:");
-        if let Ok(entries) = std::fs::read_dir(&self.collections_dir) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    println!("  {:?}", entry.path());
-                }
-            }
-        }
-        
-        if !path.exists() {
-            println!("File does not exist at: {:?}", path);
-            return Err("Collection file not found".into());
-        }
-        
-        match std::fs::read_to_string(&path) {
-            Ok(content) => {
-                println!("File content length: {} bytes", content.len());
-                println!("File content preview: {}", &content[..content.len().min(100)]);
-                
-                match serde_yaml::from_str::<OpenAPISpec>(&content) {
-                    Ok(spec) => {
-                        let api_key = self.config.get_anthropic_key()?;
-                        let docs_generator = DocsGenerator::new(&api_key);
-                        let output_dir = Path::new("docs").join(name);
-                        
-                        // Create docs directory if it doesn't exist
-                        std::fs::create_dir_all(&output_dir)?;
-                        println!("Created output directory at: {:?}", output_dir);
-                        
-                        docs_generator.generate(&spec, &output_dir).await?;
-                        Ok(())
-                    },
-                    Err(e) => {
-                        println!("Failed to parse YAML: {}", e);
-                        Err(e.into())
-                    }
-                }
-            },
-            Err(e) => {
-                println!("Error reading file: {}", e);
-                Err(e.into())
-            }
-        }
-    }
-}
-
-impl OpenAPISpec {
-    pub fn load(path: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
-        let contents = fs::read_to_string(path)?;
-        let spec = serde_yaml::from_str(&contents)?;
-        Ok(spec)
-    }
-
-    pub fn save(&self, path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        let yaml = serde_yaml::to_string(&self)?;
-        fs::write(path, yaml)?;
+        spec.save(&path)?;
+        println!("✅ Saved {} {} to collection {}", method, url, collection_name);
         Ok(())
     }
 }
