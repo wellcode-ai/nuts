@@ -10,6 +10,9 @@ use std::path::Path;
 use crate::config::Config;
 use crate::commands::call::CallCommand;
 use crate::commands::mock::MockServer;
+use anthropic::client::{Client as AnthropicClient, ClientBuilder};
+use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
+use console::style;
 
 pub struct CollectionManager {
     collections_dir: PathBuf,
@@ -142,27 +145,103 @@ impl CollectionManager {
         let spec_path = self.get_collection_path(collection);
         let mut spec = OpenAPISpec::load(&spec_path)?;
 
-        // Find and update the endpoint
-        if let Some((_path, item)) = spec.paths.iter_mut().find(|(p, _)| p.contains(endpoint)) {
-            println!("Configuring mock data for endpoint");
+        println!("Available endpoints:");
+        for path in spec.paths.keys() {
+            println!("  • {}", path);
+        }
+
+        // Find the endpoint by exact path match
+        if let Some((_path, item)) = spec.paths.iter_mut().find(|(path, _)| path == &endpoint) {
+            println!("⚙️  Analyzing endpoint and generating mock data...");
+
+            // Improve the prompt with actual schema information
+            let prompt = format!(
+                "You are a mock data generator for API testing. Generate diverse test data examples for this endpoint.\n\
+                URL: {}\n\
+                Response Schema: {}\n\n\
+                Generate 10 different examples in this format:\n\
+                Description: <what this example tests>\n\
+                {{\n  // JSON response example\n}}\n\n\
+                Include examples for:\n\
+                1. Happy path with typical data\n\
+                2. Edge cases (empty values, very long values)\n\
+                3. Special characters and Unicode\n\
+                4. Error responses (404, 500)\n\
+                5. Boundary testing\n\
+                Make each example valid JSON.",
+                endpoint,
+                serde_json::to_string_pretty(&item.get.as_ref()
+                    .and_then(|op| op.responses.get("200"))
+                    .and_then(|resp| resp.content.as_ref())
+                    .unwrap_or(&HashMap::new()))?
+            );
+
+            // Get API key for Claude
+            let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| "ANTHROPIC_API_KEY not found")?;
+            let ai_client = ClientBuilder::default().api_key(api_key).build()?;
+
+            // Get AI response
+            let messages = vec![Message {
+                role: Role::User,
+                content: vec![ContentBlock::Text { text: prompt.into() }]
+            }];
+
+            let messages_request = MessagesRequestBuilder::default()
+                .messages(messages)
+                .model("claude-3-sonnet-20240229".to_string())
+                .max_tokens(2000_usize)
+                .build()?;
+
+            let response = ai_client.messages(messages_request).await?;
             
-            let description = editor.readline("Enter mock data description: ")?;
-            let example = editor.readline("Enter example response (JSON): ")?;
+            // Debug the AI response
+            if let Some(ContentBlock::Text { text }) = response.content.first() {
+                println!("AI Response:\n{}", text);  // Debug print
+                let examples = Self::parse_mock_examples(text)?;
+                if examples.is_empty() {
+                    println!("⚠️  No valid examples could be parsed from AI response");
+                } else {
+                    // Save examples to the OpenAPI spec
+                    item.mock_data = Some(MockDataConfig {
+                        description: "AI-generated mock responses".to_string(),
+                        schema: None,
+                        examples: Some(examples.iter().map(|(_, json)| json.clone()).collect()),
+                    });
 
-            let mock_config = MockDataConfig {
-                description,
-                schema: None, // Auto-generate from example
-                examples: Some(vec![example]),
-            };
-
-            item.mock_data = Some(mock_config);
-            spec.save(&spec_path)?;
-            println!("✅ Mock data configured successfully");
+                    spec.save(&spec_path)?;
+                    println!("✅ Generated and saved {} mock examples", examples.len());
+                    
+                    // Print example summaries
+                    println!("\n📋 Generated mock examples:");
+                    for (i, (desc, _)) in examples.iter().enumerate() {
+                        println!("  {}. {}", i + 1, style(desc).cyan());
+                    }
+                }
+            }
         } else {
-            println!("❌ Endpoint not found in collection");
+            println!("❌ Endpoint not found in collection: {}", endpoint);
         }
 
         Ok(())
+    }
+
+    fn parse_mock_examples(text: &str) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+        let mut examples = Vec::new();
+        
+        // Split by "Description:" to separate examples
+        for section in text.split("Description:").skip(1) {
+            if let Some((desc, json)) = section.split_once('{') {
+                let json = format!("{{{}", json); // Add back the opening brace
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json.trim()) {
+                    examples.push((
+                        desc.trim().to_string(),
+                        serde_json::to_string_pretty(&parsed)?
+                    ));
+                }
+            }
+        }
+
+        Ok(examples)
     }
 
     pub async fn run_endpoint_perf(
@@ -219,8 +298,59 @@ impl CollectionManager {
         format: &str
     ) -> Result<(), Box<dyn std::error::Error>> {
         let spec_path = self.get_collection_path(name);
-        let spec = OpenAPISpec::load(&spec_path)?;
+        let mut spec = OpenAPISpec::load(&spec_path)?;
 
+        println!("🤖 Analyzing API endpoints and generating documentation...");
+
+        // Get API key for Claude
+        let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| "ANTHROPIC_API_KEY not found")?;
+        let ai_client = ClientBuilder::default().api_key(api_key).build()?;
+
+        // Generate documentation for each endpoint
+        for (path, item) in spec.paths.iter_mut() {
+            if let Some(operation) = &mut item.get {
+                let prompt = format!(
+                    "You are a technical writer creating OpenAPI documentation. \
+                    Analyze this API endpoint and generate a clear, detailed description:\n\
+                    Path: {}\n\
+                    Method: GET\n\
+                    Response Example: {:?}\n\n\
+                    Please provide:\n\
+                    1. A concise summary (one line)\n\
+                    2. A detailed description including:\n\
+                       - What the endpoint does\n\
+                       - Common use cases\n\
+                       - Response structure explanation\n\
+                       - Any important notes or considerations",
+                    path,
+                    operation.responses.get("200").and_then(|r| r.content.as_ref())
+                );
+
+                let messages = vec![Message {
+                    role: Role::User,
+                    content: vec![ContentBlock::Text { text: prompt.into() }]
+                }];
+
+                let messages_request = MessagesRequestBuilder::default()
+                    .messages(messages)
+                    .model("claude-3-sonnet-20240229".to_string())
+                    .max_tokens(1000_usize)
+                    .build()?;
+
+                let response = ai_client.messages(messages_request).await?;
+                
+                if let Some(ContentBlock::Text { text }) = response.content.first() {
+                    // Parse AI response into summary and description
+                    let lines: Vec<&str> = text.lines().collect();
+                    if let Some((summary, description)) = lines.split_first() {
+                        operation.summary = Some(summary.trim().to_string());
+                        operation.description = Some(description.join("\n").trim().to_string());
+                    }
+                }
+            }
+        }
+
+        // Save the updated spec
         let output_path = match format {
             "json" => self.collections_dir.join(format!("{}.json", name)),
             _ => spec_path.clone(),
@@ -238,7 +368,7 @@ impl CollectionManager {
             _ => return Err("Unsupported format".into()),
         }
 
-        println!("✅ Generated OpenAPI documentation: {}", output_path.display());
+        println!("✅ Generated enhanced OpenAPI documentation: {}", output_path.display());
         Ok(())
     }
 
