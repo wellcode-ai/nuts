@@ -28,7 +28,11 @@ async-trait = "0.1"
 termion = "2.0"
 statistical = "1.0"
 url = "2.5.0"
-
+axum = "0.7"
+tracing = "0.1"
+rand = "0.8"
+tower-http = { version = "0.5", features = ["trace"] }
+tracing-subscriber = "0.3"
 [[bin]]
 name = "nuts"
 path = "src/main.rs"
