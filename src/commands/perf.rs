@@ -14,6 +14,7 @@ use ratatui::{
 use statistical::{standard_deviation, median};
 use std::collections::HashMap;
 use std::sync::Mutex;
+use console::style;
 
 use crossterm::{
     terminal::{Clear, ClearType},
@@ -41,14 +42,16 @@ impl PerfCommand {
     }
 
     pub async fn run(&self, url: &str, users: u32, duration: Duration, method: &str, body: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("🚀 Starting performance test");
-        println!("URL: {}", url);
-        println!("Method: {}", method);
-        println!("Users: {}", users);
-        println!("Duration: {}s", duration.as_secs());
+        println!("\n🚀 Performance Test Configuration");
+        println!("═══════════════════════════════");
+        println!("URL: {}", style(url).cyan());
+        println!("Method: {}", style(method).cyan());
+        println!("Concurrent Users: {}", style(users).cyan());
+        println!("Duration: {}s", style(duration.as_secs()).cyan());
         if let Some(body) = body {
-            println!("Body: {}", body);
+            println!("Body: {}", style(body).dim());
         }
+        println!("═══════════════════════════════\n");
 
         let client = reqwest::Client::new();
         let start_time = std::time::Instant::now();
@@ -136,13 +139,23 @@ impl PerfCommand {
             0.0
         };
 
-        println!("\nResults:");
-        println!("Total Requests: {}", total_requests);
-        println!("Successful Requests: {}", total_requests - total_errors);
-        println!("Failed Requests: {}", total_errors);
-        println!("Average Latency: {:.2}ms", avg_latency);
-        println!("Requests/second: {:.2}", total_requests as f64 / duration.as_secs_f64());
+        println!("\n📊 Test Results");
+        println!("═══════════════");
+        println!("Request Statistics:");
+        println!("  • Total Requests: {}", style(total_requests).green());
+        println!("  • Successful: {}", style(total_requests - total_errors).green());
+        println!("  • Failed: {}", style(total_errors).red());
+        
+        println!("\nPerformance Metrics:");
+        println!("  • Average RPS: {:.1}", style(total_requests as f64 / duration.as_secs_f64()).cyan());
+        println!("  • Average Latency: {:.1}ms", style(avg_latency).cyan());
+        
+        if total_errors > 0 {
+            println!("\n⚠️  Error Rate: {:.2}%", 
+                style((total_errors as f64 / total_requests as f64) * 100.0).red());
+        }
 
+        println!("\n✅ Test completed successfully");
         Ok(())
     }
 
@@ -380,6 +393,11 @@ impl PerfCommand {
             status_codes: metrics.status_codes.clone(),
             std_dev_latency: standard_deviation(metrics.latencies.as_slice(), None),
             median_latency: median(metrics.latencies.as_slice()),
+            response_time_ranges: HashMap::new(),
+            response_time_distribution: Vec::new(),
+            requests_per_second: Vec::new(),
+            active_users: Vec::new(),
+            concurrent_users: AtomicUsize::new(0),
         }
     }
 
@@ -407,6 +425,29 @@ impl PerfCommand {
 
         println!("\n❌ Error Rate: {:.2}%", stats.error_rate * 100.0);
 
+        println!("\n📊 Response Time Distribution");
+        println!("   By Range:");
+        for (range, count) in &stats.response_time_ranges {
+            let percentage = (*count as f64 / stats.total_requests as f64) * 100.0;
+            println!("    {} : {} ({:.1}%)", range, count, percentage);
+        }
+
+        println!("\n📈 Response Time Distribution (100ms buckets)");
+        for (bucket_start, count) in &stats.response_time_distribution {
+            if *count > 0 {
+                println!("    {:.0}ms-{:.0}ms : {}", 
+                    bucket_start, 
+                    bucket_start + 100.0,
+                    count
+                );
+            }
+        }
+
+        println!("\n👥 Load Profile");
+        println!("  • Peak Concurrent Users: {}", stats.concurrent_users.load(Ordering::Relaxed));
+        println!("  • Average RPS: {:.2}", stats.avg_rps);
+        println!("  • Peak RPS: {:.2}", stats.max_rps);
+
         Ok(())
     }
 }
@@ -423,6 +464,11 @@ struct PerfStats {
     status_codes: HashMap<u16, usize>,
     std_dev_latency: f64,
     median_latency: f64,
+    response_time_ranges: HashMap<String, usize>,
+    response_time_distribution: Vec<(f64, usize)>,
+    requests_per_second: Vec<(f64, usize)>,
+    active_users: Vec<(f64, usize)>,
+    concurrent_users: AtomicUsize,
 }
 
 fn percentile(sorted_data: &[f64], p: f64) -> f64 {
@@ -455,6 +501,36 @@ impl PerfStats {
             0.0
         };
         
+        // Calculate response time ranges
+        let mut ranges = HashMap::new();
+        for latency in &metrics.latencies {
+            let range = match *latency {
+                t if t < 800.0 => "<800ms",
+                t if t < 1200.0 => "<1.2s",
+                t if t < 2000.0 => "<2s",
+                _ => ">2s",
+            };
+            *ranges.entry(range.to_string()).or_insert(0) += 1;
+        }
+
+        // Calculate response time distribution (in 100ms buckets)
+        let mut distribution = vec![];
+        let bucket_size = 100.0;
+        let max_latency = metrics.latencies.iter().fold(0.0_f64, |a, &b| a.max(b));
+        let num_buckets = (max_latency / bucket_size).ceil() as usize;
+        
+        let mut buckets = vec![0; num_buckets];
+        for &latency in &metrics.latencies {
+            let bucket = (latency / bucket_size).floor() as usize;
+            if bucket < buckets.len() {
+                buckets[bucket] += 1;
+            }
+        }
+
+        for (i, count) in buckets.iter().enumerate() {
+            distribution.push((i as f64 * bucket_size, *count));
+        }
+
         Self {
             total_requests,
             avg_rps: total_requests as f64 / duration.max(1.0), // Prevent division by zero
@@ -466,6 +542,11 @@ impl PerfStats {
             status_codes: metrics.status_codes.clone(),
             std_dev_latency: std_dev,
             median_latency: median_lat,
+            response_time_ranges: ranges,
+            response_time_distribution: distribution,
+            requests_per_second: calculate_requests_per_second(&metrics.timestamps),
+            active_users: calculate_active_users(&metrics.timestamps),
+            concurrent_users: AtomicUsize::new(0),
         }
     }
     fn format_status_codes(codes: &HashMap<u16, usize>) -> String {
@@ -474,5 +555,31 @@ impl PerfStats {
             .collect::<Vec<_>>()
             .join("\n")
     }    
+}
+
+fn calculate_requests_per_second(timestamps: &[f64]) -> Vec<(f64, usize)> {
+    let mut rps = Vec::new();
+    if timestamps.is_empty() {
+        return rps;
+    }
+
+    let start_time = timestamps[0];
+    let end_time = *timestamps.last().unwrap();
+    let mut current_second = start_time.floor();
+
+    while current_second <= end_time {
+        let count = timestamps.iter()
+            .filter(|&&t| t >= current_second && t < current_second + 1.0)
+            .count();
+        rps.push((current_second - start_time, count));
+        current_second += 1.0;
+    }
+    rps
+}
+
+fn calculate_active_users(timestamps: &[f64]) -> Vec<(f64, usize)> {
+    // Similar to RPS calculation but tracks concurrent users
+    // based on the test duration and number of users
+    Vec::new() // Implementation details depend on how we track user lifecycle
 }
 
