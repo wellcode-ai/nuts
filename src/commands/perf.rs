@@ -17,10 +17,13 @@ use crossterm::{
     terminal::{Clear, ClearType},
     ExecutableCommand,
 };
+use anthropic::client::{Client as AnthropicClient, ClientBuilder};
+use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 
 pub struct PerfCommand {
     client: Client,
     metrics: Arc<Metrics>,
+    ai_client: AnthropicClient,
 }
 
 impl PerfCommand {
@@ -28,6 +31,42 @@ impl PerfCommand {
         Self {
             client: Client::new(),
             metrics: Arc::new(Metrics::new()),
+            ai_client: ClientBuilder::default()
+                .api_key(std::env::var("ANTHROPIC_API_KEY").unwrap_or_default())
+                .build()
+                .unwrap(),
+        }
+    }
+
+    async fn get_performance_analysis(&self, summary: &MetricsSummary, duration: Duration) -> Result<String, Box<dyn std::error::Error>> {
+        let prompt = format!(
+            "Analyze these API performance metrics and provide 3 key insights or recommendations:\n\
+            RPS: {:.1} avg, {} peak | Errors: {:.2}% | Latency: {}ms avg, {}ms p95\n\
+            Be extremely concise (one line per point). Focus on actionable insights.",
+            summary.total_requests as f64 / duration.as_secs_f64(),
+            summary.peak_rps,
+            summary.error_rate * 100.0,
+            summary.avg_latency.as_millis(),
+            summary.p95_latency.as_millis(),
+        );
+
+        let messages = vec![Message {
+            role: Role::User,
+            content: vec![ContentBlock::Text { text: prompt }],
+        }];
+
+        let message_request = MessagesRequestBuilder::default()
+            .messages(messages)
+            .model("claude-3-haiku-20240307".to_string())
+            .max_tokens(200_usize)
+            .build()?;
+
+        let response = self.ai_client.messages(message_request).await?;
+        
+        if let Some(ContentBlock::Text { text }) = response.content.first() {
+            Ok(text.trim().to_string())
+        } else {
+            Ok("Analysis not available.".to_string())
         }
     }
 
@@ -198,6 +237,19 @@ impl PerfCommand {
             }
         }
         
+        // AI Analysis
+        println!("\n{}  {}", style("🤖").cyan(), style("AI Insights").bold());
+        match self.get_performance_analysis(&final_summary, duration).await {
+            Ok(analysis) => {
+                for (i, line) in analysis.lines().enumerate() {
+                    if !line.trim().is_empty() {
+                        println!("   {} {}", style("•").dim(), style(line.trim()).dim());
+                    }
+                }
+            }
+            Err(_) => println!("   {} Analysis not available", style("•").dim()),
+        }
+
         println!();
         Ok(())
     }
