@@ -14,6 +14,7 @@ pub struct NutsShell {
     history: Vec<String>,
     suggestions: Vec<String>,
     last_request: Option<(String, String, Option<String>)>,
+    last_response: Option<String>,
     collection_manager: CollectionManager,
 }
 
@@ -57,6 +58,7 @@ impl NutsShell {
                 "daemon".to_string(),
             ],
             last_request: None,
+            last_response: None,
             collection_manager: CollectionManager::new(),
         };
         
@@ -93,7 +95,7 @@ impl NutsShell {
     fn get_welcome_message(&self) -> String {
         let ascii_art = r#"
     ███╗   ██╗██╗   ██╗███████████████╗
-    ████╗  ██║██║   ██║╚══██╔══╝██╔════╝
+    ████╗  ██║█║   ██║╚══██╔══╝██╔════╝
     ██╔██╗ ██║██║   ██║   ██║   ███████╗
     ██║╚██╗██║██║   ██║   ██║   ╚════██║
     ██║ ╚████║╚█████╔╝   ██║   ███████║
@@ -103,7 +105,7 @@ impl NutsShell {
         format!(
             "{}\n{}\n{}\n",
             style(ascii_art).cyan(),
-            style("🌐 Network Universal Testing Suite v0.1.0").magenta(),
+            style(" Network Universal Testing Suite v0.1.0").magenta(),
             style("Type 'help' to see available commands").green()
         )
     }
@@ -207,12 +209,10 @@ impl NutsShell {
                         // Store the request before executing
                         self.store_last_request(method.clone(), url.clone(), body.clone());
                         
-                        // Validate URL format
-                        if !url.starts_with("http://") && !url.starts_with("https://") {
-                            println!("⚠️  Warning: URL should start with http:// or https://");
-                        }
+                        // Execute call and store response
+                        let response = CallCommand::new().execute_with_response(&parts.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).await?;
+                        self.last_response = Some(response);
                         
-                        CallCommand::new().execute(&parts.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).await?;
                     } else {
                         println!("❌ Usage: call [METHOD] URL [JSON_BODY]");
                         println!("Supported methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS");
@@ -494,11 +494,16 @@ impl NutsShell {
                         let collection_name = &parts[1];
                         let endpoint_name = &parts[2];
                         if let Some(last_request) = &self.last_request {
-                            self.collection_manager.save_request_to_collection(
-                                collection_name,
-                                endpoint_name,
-                                last_request
-                            )?;
+                            if let Some(last_response) = &self.last_response {
+                                self.collection_manager.save_request_to_collection(
+                                    collection_name,
+                                    endpoint_name,
+                                    last_request,
+                                    Some(last_response.clone()),
+                                )?;
+                            } else {
+                                println!("❌ No response to save. Make a call first!");
+                            }
                         } else {
                             println!("❌ No request to save. Make a call first!");
                         }

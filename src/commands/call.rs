@@ -78,6 +78,69 @@ impl CallCommand {
         Ok(())
     }
 
+    pub async fn execute_with_response(&self, args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
+        // Parse arguments
+        let (method, url, body) = self.parse_args(args)?;
+        
+        // Add http:// if not present
+        let full_url = if !url.starts_with("http") {
+            format!("http://{}", url)
+        } else {
+            url.to_string()
+        };
+
+        println!("🌐 {} {}", style(&method).cyan(), style(&full_url).cyan());
+
+        // Build the request
+        let mut request = self.client.request(
+            method.parse()?,
+            &full_url
+        );
+
+        // Add JSON body if provided
+        if let Some(json_body) = body {
+            println!("📝 Request Body:");
+            println!("{}", style(&json_body).blue());
+            request = request.header(header::CONTENT_TYPE, "application/json")
+                           .body(json_body.to_string());
+        }
+
+        // Send request
+        let response = request.send().await?;
+        
+        // Print status code
+        println!("📡 Status: {}", style(response.status()).yellow());
+        
+        // Print headers
+        println!("\n📋 Headers:");
+        for (key, value) in response.headers() {
+            println!("  {}: {}", style(key).dim(), value.to_str().unwrap_or(""));
+        }
+        
+        // Store headers before consuming response
+        let headers = response.headers().clone();
+        
+        // Print response body
+        let text = response.text().await?;
+        println!("\n📦 Response:");
+        // Try to pretty print if it's JSON
+        match serde_json::from_str::<Value>(&text) {
+            Ok(json) => {
+                println!("{}", style(serde_json::to_string_pretty(&json)?).green());
+            },
+            Err(_) => {
+                // If it's not JSON, just print as plain text
+                println!("{}", style(text.trim()).green());
+            }
+        }
+
+        if args.contains(&"--analyze") {
+            let _ = self.handle_analyze(&headers, &text).await?;
+        }
+
+        Ok(text)  // Return the response body
+    }
+
     fn parse_args<'a>(&self, args: &[&'a str]) -> Result<(String, &'a str, Option<Value>), Box<dyn Error>> {
         if args.len() < 2 {
             return Err("Usage: call [METHOD] URL [JSON_BODY]".into());

@@ -258,7 +258,8 @@ impl CollectionManager {
         &self,
         collection_name: &str,
         endpoint_name: &str,
-        request: &(String, String, Option<String>)
+        request: &(String, String, Option<String>),
+        response: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (method, url, body) = request;
         let path = self.get_collection_path(collection_name);
@@ -272,7 +273,7 @@ impl CollectionManager {
         // Add the endpoint to the spec
         let path_item = spec.paths.entry(url.clone()).or_insert(PathItem::new());
         
-        // Create operation
+        // Create operation with response example
         let operation = Operation {
             summary: Some(endpoint_name.to_string()),
             description: Some(format!("Generated from {} request", method)),
@@ -298,7 +299,19 @@ impl CollectionManager {
                 let mut responses = HashMap::new();
                 responses.insert("200".to_string(), Response {
                     description: "Successful response".to_string(),
-                    content: None,
+                    content: response.map(|resp| {
+                        let mut content = HashMap::new();
+                        content.insert("application/json".to_string(), MediaType {
+                            schema: Schema {
+                                schema_type: "object".to_string(),
+                                format: None,
+                                properties: None,
+                                items: None,
+                            },
+                            example: serde_json::from_str(&resp).ok(),
+                        });
+                        content
+                    }),
                 });
                 responses
             },
