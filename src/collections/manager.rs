@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use std::fs;
 use std::time::Duration;
 use std::collections::HashMap;
-use crate::config::Config;
 use crate::commands::call::CallCommand;
 use crate::commands::mock::MockServer;
 use anthropic::client::ClientBuilder;
@@ -93,7 +92,7 @@ impl CollectionManager {
         &self,
         collection: &str,
         endpoint: &str,
-        args: &[String]
+        _args: &[String]
     ) -> Result<(), Box<dyn std::error::Error>> {
         let spec_path = self.get_collection_path(collection);
         let spec = OpenAPISpec::load(&spec_path)?;
@@ -104,7 +103,7 @@ impl CollectionManager {
             .ok_or("Endpoint not found in collection")?;
 
         // Determine method and operation
-        let (method, operation) = item.get_operation()
+        let (method, _operation) = item.get_operation()
             .ok_or("No operation found for endpoint")?;
 
         // Build the full URL
@@ -136,7 +135,7 @@ impl CollectionManager {
         &self,
         collection: &str,
         endpoint: &str,
-        editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>
+        _editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>
     ) -> Result<(), Box<dyn std::error::Error>> {
         let spec_path = self.get_collection_path(collection);
         let mut spec = OpenAPISpec::load(&spec_path)?;
@@ -255,7 +254,7 @@ impl CollectionManager {
             .ok_or("Endpoint not found in collection")?;
 
         // Get method and operation
-        let (method, operation) = item.get_operation()
+        let (method, _operation) = item.get_operation()
             .ok_or("No operation found for endpoint")?;
 
         // Parse options

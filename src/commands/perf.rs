@@ -4,19 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::io::Write;
-use ratatui::{
-    backend::CrosstermBackend,
-    widgets::{Block, Borders, Chart, Dataset, Paragraph},
-    layout::{Layout, Constraint, Direction},
-    style::{Color, Style},
-    Terminal,
-    prelude::Marker,
-};
 use console::style;
-use crossterm::{
-    terminal::{Clear, ClearType},
-    ExecutableCommand,
-};
 use anthropic::client::{Client as AnthropicClient, ClientBuilder};
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 
@@ -241,7 +229,7 @@ impl PerfCommand {
         println!("\n{}  {}", style("🤖").cyan(), style("AI Insights").bold());
         match self.get_performance_analysis(&final_summary, duration).await {
             Ok(analysis) => {
-                for (i, line) in analysis.lines().enumerate() {
+                for (_i, line) in analysis.lines().enumerate() {
                     if !line.trim().is_empty() {
                         println!("   {} {}", style("•").dim(), style(line.trim()).dim());
                     }

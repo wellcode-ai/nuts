@@ -171,16 +171,3 @@ async fn handle_mock(examples: Vec<String>) -> impl IntoResponse {
         }
     }
 }
-
-// Add a catch-all handler for unmatched routes
-async fn handle_not_found() -> impl IntoResponse {
-    warn!("Endpoint not found");
-    (
-        StatusCode::NOT_FOUND,
-        Json(serde_json::json!({
-            "error": "Not Found",
-            "code": 404,
-            "message": "The requested endpoint does not exist"
-        }))
-    )
-} 
