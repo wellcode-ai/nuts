@@ -10,11 +10,7 @@ use crate::commands::mock::MockServer;
 use anthropic::client::{Client as AnthropicClient, ClientBuilder};
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 use console::style;
-
-#[derive(Default)]
-pub struct Config {
-    pub api_key: Option<String>,
-}
+use crate::config::Config;
 
 pub struct CollectionManager {
     collections_dir: PathBuf,
@@ -24,8 +20,7 @@ pub struct CollectionManager {
 
 impl CollectionManager {
     pub fn new(collections_dir: PathBuf, config: Config) -> Self {
-        let api_key = config.api_key.clone()
-            .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+        let api_key = config.anthropic_api_key.clone()
             .unwrap_or_default();
 
         Self {
@@ -144,8 +139,17 @@ impl CollectionManager {
         &self,
         collection: &str,
         endpoint: &str,
-        _editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>
+        editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // Check for API key
+        let api_key = self.config.anthropic_api_key.clone()
+            .ok_or("API key not configured. Use 'config api-key' to set it")?;
+
+        // Verify API key is not empty
+        if api_key.trim().is_empty() {
+            return Err("API key is empty. Use 'config api-key' to set it".into());
+        }
+
         let spec_path = self.get_collection_path(collection);
         let mut spec = OpenAPISpec::load(&spec_path)?;
 
@@ -180,10 +184,6 @@ impl CollectionManager {
                     .unwrap_or(&HashMap::new()))?
             );
 
-            // Get API key for Claude
-            let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| "ANTHROPIC_API_KEY not found")?;
-            let ai_client = ClientBuilder::default().api_key(api_key).build()?;
-
             // Get AI response
             let messages = vec![Message {
                 role: Role::User,
@@ -196,7 +196,7 @@ impl CollectionManager {
                 .max_tokens(2000_usize)
                 .build()?;
 
-            let response = ai_client.messages(messages_request).await?;
+            let response = self.ai_client.messages(messages_request).await?;
             
             // Debug the AI response
             if let Some(ContentBlock::Text { text }) = response.content.first() {
@@ -352,7 +352,7 @@ impl CollectionManager {
                 println!("🤖 Generating realistic test scenarios...\n");
                 if let Ok(flow) = self.generate_user_flow(&spec).await {
                     if !flow.is_empty() {
-                        let perf = PerfCommand::new();
+                        let perf = PerfCommand::new(&self.config);
                         for (method, path, body) in flow {
                             println!("\n🚀 Testing {} {}", style(&method).cyan(), style(&path).green());
                             let url = if path.starts_with("http://") || path.starts_with("https://") {
@@ -375,7 +375,7 @@ impl CollectionManager {
 
             // Fallback to testing all GET endpoints
             println!("ℹ️  Testing all GET endpoints...");
-            let perf = PerfCommand::new();
+            let perf = PerfCommand::new(&self.config);
             for (path, item) in &spec.paths {
                 if let Some(method) = item.get_operation() {
                     println!("\n🚀 Testing GET {}", style(path).green());
@@ -424,9 +424,14 @@ impl CollectionManager {
 
         println!("🤖 Analyzing API endpoints and generating documentation...");
 
-        // Get API key for Claude
-        let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| "ANTHROPIC_API_KEY not found")?;
-        let ai_client = ClientBuilder::default().api_key(api_key).build()?;
+        // Get API key from config
+        let api_key = self.config.anthropic_api_key.clone()
+            .ok_or("API key not configured. Use 'config api-key' to set it")?;
+
+        // Verify API key is not empty
+        if api_key.trim().is_empty() {
+            return Err("API key is empty. Use 'config api-key' to set it".into());
+        }
 
         // Generate documentation for each endpoint
         for (path, item) in spec.paths.iter_mut() {
@@ -459,7 +464,7 @@ impl CollectionManager {
                     .max_tokens(1000_usize)
                     .build()?;
 
-                let response = ai_client.messages(messages_request).await?;
+                let response = self.ai_client.messages(messages_request).await?;
                 
                 if let Some(ContentBlock::Text { text }) = response.content.first() {
                     // Parse AI response into summary and description
@@ -596,7 +601,7 @@ impl CollectionManager {
         base_url: &str
     ) -> Result<(), Box<dyn std::error::Error>> {
         println!("Running single endpoint test...");
-        let perf = PerfCommand::new();
+        let perf = PerfCommand::new(&self.config);
         let url = if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
             endpoint.to_string()
         } else {
@@ -609,5 +614,9 @@ impl CollectionManager {
             method,
             None
         ).await
+    }
+
+    pub fn get_collections_dir(&self) -> PathBuf {
+        self.collections_dir.clone()
     }
 }

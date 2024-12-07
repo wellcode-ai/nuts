@@ -3,6 +3,7 @@ use reqwest::{header, Client};
 use serde_json::Value;
 use std::error::Error;
 use crate::models::analysis::{ApiAnalysis, CacheAnalysis};
+use crate::commands::CommandResult;
 
 pub struct CallCommand {
     client: Client,
@@ -15,37 +16,29 @@ impl CallCommand {
         }
     }
 
-    pub async fn execute(&self, args: &[&str]) -> Result<(), Box<dyn Error>> {
-        // Parse arguments
+    pub async fn execute(&self, args: &[&str]) -> CommandResult {
+        println!("🚀 Executing request...");
+        
         let (method, url, body) = self.parse_args(args)?;
         
-        // Add http:// if not present
-        let full_url = if !url.starts_with("http") {
+        // Convert url to proper URL type
+        let url = if !url.starts_with("http") {
             format!("http://{}", url)
         } else {
             url.to_string()
         };
-
-        println!("🌐 {} {}", style(&method).cyan(), style(&full_url).cyan());
-
-        // Build the request
-        let mut request = self.client.request(
-            method.parse()?,
-            &full_url
-        );
-
-        // Add JSON body if provided
-        if let Some(json_body) = body {
-            println!("📝 Request Body:");
-            println!("{}", style(&json_body).blue());
-            request = request.header(header::CONTENT_TYPE, "application/json")
-                           .body(json_body.to_string());
-        }
-
-        // Send request
-        let response = request.send().await?;
         
-        // Print status code
+        let response = self.client.request(method.parse()?, &url)
+            .body(body.map(|b| b.to_string()).unwrap_or_default())
+            .send()
+            .await?;
+            
+        self.print_response(response).await?;
+        
+        Ok(())
+    }
+
+    async fn print_response(&self, response: reqwest::Response) -> CommandResult {
         println!("📡 Status: {}", style(response.status()).yellow());
         
         // Print headers
@@ -54,25 +47,14 @@ impl CallCommand {
             println!("  {}: {}", style(key).dim(), value.to_str().unwrap_or(""));
         }
         
-        // Store headers before consuming response
-        let headers = response.headers().clone();
-        
         // Print response body
         let text = response.text().await?;
         println!("\n📦 Response:");
-        // Try to pretty print if it's JSON
-        match serde_json::from_str::<Value>(&text) {
-            Ok(json) => {
-                println!("{}", style(serde_json::to_string_pretty(&json)?).green());
-            },
-            Err(_) => {
-                // If it's not JSON, just print as plain text
-                println!("{}", style(text.trim()).green());
-            }
-        }
-
-        if args.contains(&"--analyze") {
-            let _ = self.handle_analyze(&headers, &text).await?;
+        
+        if let Ok(json) = serde_json::from_str::<Value>(&text) {
+            println!("{}", style(serde_json::to_string_pretty(&json)?).green());
+        } else {
+            println!("{}", style(text.trim()).green());
         }
 
         Ok(())

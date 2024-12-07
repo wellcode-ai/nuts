@@ -7,6 +7,7 @@ use std::io::Write;
 use console::style;
 use anthropic::client::{Client as AnthropicClient, ClientBuilder};
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
+use crate::config::Config;
 
 pub struct PerfCommand {
     client: Client,
@@ -15,12 +16,15 @@ pub struct PerfCommand {
 }
 
 impl PerfCommand {
-    pub fn new() -> Self {
+    pub fn new(config: &Config) -> Self {
+        let api_key = config.anthropic_api_key.clone()
+            .unwrap_or_default();
+
         Self {
             client: Client::new(),
             metrics: Arc::new(Metrics::new()),
             ai_client: ClientBuilder::default()
-                .api_key(std::env::var("ANTHROPIC_API_KEY").unwrap_or_default())
+                .api_key(api_key)
                 .build()
                 .unwrap(),
         }
@@ -29,13 +33,27 @@ impl PerfCommand {
     async fn get_performance_analysis(&self, summary: &MetricsSummary, duration: Duration) -> Result<String, Box<dyn std::error::Error>> {
         let prompt = format!(
             "Analyze these API performance metrics and provide 3 key insights or recommendations:\n\
-            RPS: {:.1} avg, {} peak | Errors: {:.2}% | Latency: {}ms avg, {}ms p95\n\
-            Be extremely concise (one line per point). Focus on actionable insights.",
+            Total Requests: {} ({} req/s)\n\
+            Success Rate: {:.1}%\n\
+            Response Times:\n\
+            - Average: {}ms\n\
+            - p50: {}ms\n\
+            - p95: {}ms\n\
+            - p99: {}ms\n\
+            Peak RPS: {}\n\
+            \n\
+            Provide concise, actionable insights focusing on:\n\
+            1. Performance characteristics\n\
+            2. Potential bottlenecks\n\
+            3. Optimization opportunities",
+            summary.total_requests,
             summary.total_requests as f64 / duration.as_secs_f64(),
-            summary.peak_rps,
-            summary.error_rate * 100.0,
+            (1.0 - summary.error_rate) * 100.0,
             summary.avg_latency.as_millis(),
+            summary.median_latency.as_millis(),
             summary.p95_latency.as_millis(),
+            summary.p99_latency.as_millis(),
+            summary.peak_rps
         );
 
         let messages = vec![Message {
@@ -46,7 +64,7 @@ impl PerfCommand {
         let message_request = MessagesRequestBuilder::default()
             .messages(messages)
             .model("claude-3-haiku-20240307".to_string())
-            .max_tokens(200_usize)
+            .max_tokens(300_usize)
             .build()?;
 
         let response = self.ai_client.messages(message_request).await?;

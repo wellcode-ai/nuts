@@ -1,12 +1,12 @@
 use console::{style, Term};
 use anthropic::client::{Client as AnthropicClient, ClientBuilder};
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
-
 use reqwest::header;
 use reqwest::Client;
+use crate::config::Config;
 
 pub struct SecurityCommand {
-    api_key: String,
+    config: Config,
     deep_scan: bool,
     auth_token: Option<String>,
     save_file: Option<String>,
@@ -15,14 +15,20 @@ pub struct SecurityCommand {
 }
 
 impl SecurityCommand {
-    pub fn new(api_key: &str) -> Self {
+    pub fn new(config: Config) -> Self {
+        let api_key = config.anthropic_api_key.clone()
+            .unwrap_or_default();
+
         Self {
-            api_key: api_key.to_string(),
+            config,
             deep_scan: false,
             auth_token: None,
             save_file: None,
             http_client: Client::new(),
-            ai_client: ClientBuilder::default().api_key(api_key.to_string()).build().unwrap(),
+            ai_client: ClientBuilder::default()
+                .api_key(api_key)
+                .build()
+                .unwrap(),
         }
     }
 
@@ -178,7 +184,7 @@ impl SecurityCommand {
 
         // Print the analysis
         if let Some(ContentBlock::Text { text }) = messages_response.content.first() {
-            self.display_security_analysis(text).await;
+            self.display_security_analysis(&text).await;
         } else {
             println!("❌ Error: Could not parse AI response");
         }
