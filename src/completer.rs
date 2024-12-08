@@ -7,15 +7,17 @@ use std::collections::HashMap;
 
 pub struct NutsCompleter {
     commands: HashMap<String, String>,
+    aliases: HashMap<String, String>,
 }
 
 impl NutsCompleter {
     pub fn new() -> Self {
         let mut commands = HashMap::new();
+        let mut aliases = HashMap::new();
         
         // Core API Testing
-        commands.insert("call".to_string(), "Make API calls: call <METHOD> <URL> [BODY]".to_string());
-        commands.insert("perf".to_string(), "Run performance tests: perf <METHOD> <URL> [OPTIONS]".to_string());
+        commands.insert("call".to_string(), "Examples:\n  call GET https://api.example.com/users\n  call POST https://api.example.com/users '{\"name\":\"test\"}'".to_string());
+        commands.insert("perf".to_string(), "Examples:\n  perf GET https://api.example.com/users --users 100 --duration 30s\n  perf POST https://api.example.com/users '{\"name\":\"test\"}' --users 50".to_string());
         commands.insert("security".to_string(), "Security analysis: security <URL> [OPTIONS]".to_string());
         
         // Collection Management
@@ -34,11 +36,23 @@ impl NutsCompleter {
         commands.insert("help".to_string(), "Show this help message".to_string());
         commands.insert("exit".to_string(), "Exit NUTS".to_string());
 
-        Self { commands }
+        // Add aliases
+        aliases.insert("c".to_string(), "call".to_string());
+        aliases.insert("p".to_string(), "perf".to_string());
+        aliases.insert("s".to_string(), "security".to_string());
+        aliases.insert("h".to_string(), "help".to_string());
+        aliases.insert("q".to_string(), "quit".to_string());
+
+        Self { commands, aliases }
     }
 
     fn get_command_completions(&self, line: &str) -> Vec<String> {
         let mut completions = Vec::new();
+        
+        // Check aliases first
+        if let Some(expanded) = self.aliases.get(line) {
+            completions.push(expanded.clone());
+        }
 
         // Base commands
         let base_commands = vec![

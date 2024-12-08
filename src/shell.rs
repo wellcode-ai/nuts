@@ -15,6 +15,7 @@ use anthropic::types::Message;
 use anthropic::types::ContentBlock;
 use anthropic::types::MessagesRequestBuilder;
 use anthropic::types::Role;
+use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Debug)]
 pub enum ShellError {
@@ -635,5 +636,66 @@ impl NutsShell {
             },
             _ => println!("❌ Error: {}", style(error).red()),
         }
+    }
+
+    fn print_info(&self, msg: &str) {
+        println!("ℹ️  {}", style(msg).blue());
+    }
+
+    fn print_success(&self, msg: &str) {
+        println!("✅ {}", style(msg).green());
+    }
+
+    fn print_warning(&self, msg: &str) {
+        println!("⚠️  {}", style(msg).yellow());
+    }
+
+    fn print_error(&self, msg: &str) {
+        println!("❌ {}", style(msg).red());
+    }
+
+    fn show_command_help(&self, command: &str) {
+        match command {
+            "call" => {
+                println!("{}", style("USAGE:").bold());
+                println!("  call [METHOD] URL [BODY]");
+                println!("\n{}", style("DESCRIPTION:").bold());
+                println!("  Make HTTP requests to test API endpoints");
+                println!("\n{}", style("OPTIONS:").bold());
+                println!("  METHOD     HTTP method (GET, POST, PUT, DELETE, PATCH)");
+                println!("  URL        Target URL");
+                println!("  BODY       JSON request body (for POST/PUT/PATCH)");
+                println!("\n{}", style("EXAMPLES:").bold());
+                println!("  call GET https://api.example.com/users");
+                println!("  call POST https://api.example.com/users '{{\"name\":\"test\"}}'");
+            },
+            "perf" => {
+                println!("{}", style("USAGE:").bold());
+                println!("  perf [METHOD] URL [OPTIONS]");
+                println!("\n{}", style("DESCRIPTION:").bold());
+                println!("  Run performance tests against API endpoints");
+                println!("\n{}", style("OPTIONS:").bold());
+                println!("  --users N        Number of concurrent users");
+                println!("  --duration Ns    Test duration in seconds");
+                println!("\n{}", style("EXAMPLES:").bold());
+                println!("  perf GET https://api.example.com/users --users 100 --duration 30s");
+            },
+            _ => println!("No detailed help available for '{}'. Use 'help' to see all commands.", command),
+        }
+    }
+
+    fn with_progress<F, T>(&self, msg: &str, f: F) -> T 
+    where 
+        F: FnOnce(&ProgressBar) -> T 
+    {
+        let spinner = ProgressBar::new_spinner()
+            .with_style(ProgressStyle::default_spinner()
+                .template("{spinner} {msg}")
+                .unwrap());
+        spinner.set_message(msg.to_string());
+        
+        let result = f(&spinner);
+        spinner.finish_with_message("Done!");
+        result
     }
 }

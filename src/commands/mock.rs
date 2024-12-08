@@ -24,15 +24,22 @@ use rand::Rng;
 use axum::extract::Path;
 use axum_server::Server;
 use std::future::Future;
+use tokio::signal::ctrl_c;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct MockServer {
     spec: OpenAPISpec,
     port: u16,
+    running: Arc<AtomicBool>,
 }
 
 impl MockServer {
     pub fn new(spec: OpenAPISpec, port: u16) -> Self {
-        Self { spec, port }
+        Self { 
+            spec, 
+            port,
+            running: Arc::new(AtomicBool::new(true)),
+        }
     }
 
     pub async fn start(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -57,11 +64,23 @@ impl MockServer {
 
         println!("🎭 Starting mock server on http://127.0.0.1:{}", self.port);
         println!("📚 Loaded {} endpoints from OpenAPI spec", self.spec.paths.len());
+        println!("Press Ctrl+C to stop the server");
 
         let addr = SocketAddr::from(([127, 0, 0, 1], self.port));
-        Server::bind(addr)
-            .serve(router.into_make_service())
-            .await?;
+        let server = Server::bind(addr).serve(router.into_make_service());
+        let running = self.running.clone();
+
+        tokio::select! {
+            result = server => {
+                if let Err(e) = result {
+                    println!("Server error: {}", e);
+                }
+            }
+            _ = ctrl_c() => {
+                println!("\n🛑 Stopping mock server...");
+                running.store(false, Ordering::SeqCst);
+            }
+        }
 
         Ok(())
     }

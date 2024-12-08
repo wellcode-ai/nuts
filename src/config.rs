@@ -9,13 +9,19 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        let path = Self::config_path()?;
-        if path.exists() {
-            let content = std::fs::read_to_string(path)?;
-            Ok(serde_json::from_str(&content)?)
-        } else {
-            Ok(Config::default())
+        let mut config = Config::default();
+        
+        // Load from env vars
+        if let Ok(key) = std::env::var("NUTS_API_KEY") {
+            config.anthropic_api_key = Some(key);
         }
+        
+        // Load from config file
+        if let Ok(file_config) = Config::load_from_file() {
+            config = config.merge(file_config);
+        }
+        
+        Ok(config)
     }
 
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -33,5 +39,25 @@ impl Config {
             .ok_or("Could not find home directory")?
             .join(".nuts")
             .join("config.json"))
+    }
+
+    pub fn load_from_file() -> Result<Self, Box<dyn std::error::Error>> {
+        let path = Self::config_path()?;
+        if path.exists() {
+            let content = std::fs::read_to_string(path)?;
+            Ok(serde_json::from_str(&content)?)
+        } else {
+            Ok(Config::default())
+        }
+    }
+
+    pub fn merge(mut self, other: Config) -> Self {
+        if self.anthropic_api_key.is_none() {
+            self.anthropic_api_key = other.anthropic_api_key;
+        }
+        if self.api_key.is_none() {
+            self.api_key = other.api_key;
+        }
+        self
     }
 }
