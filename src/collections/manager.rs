@@ -11,6 +11,7 @@ use anthropic::client::{Client as AnthropicClient, ClientBuilder};
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 use console::style;
 use crate::config::Config;
+use url;
 
 pub struct CollectionManager {
     collections_dir: PathBuf,
@@ -56,25 +57,76 @@ impl CollectionManager {
         let spec_path = self.get_collection_path(collection);
         let mut spec = OpenAPISpec::load(&spec_path)?;
 
-        // Create new path item or get existing one
-        let path_item = spec.paths.entry(path.to_string()).or_insert(PathItem::new());
+        // Parse and clean the URL/path
+        let (server_url, clean_path) = if path.starts_with("http") {
+            let url = url::Url::parse(path)?;
+            let base = format!("{}://{}", url.scheme(), url.host_str().unwrap_or("localhost"));
+            (base, url.path().to_string())
+        } else {
+            ("http://localhost:3000".to_string(), 
+             if path.starts_with('/') { path.to_string() } else { format!("/{}", path) })
+        };
 
-        // Create operation
+        // Update servers
+        if !spec.servers.iter().any(|s| s.url == server_url) {
+            spec.servers.push(Server {
+                url: server_url,
+                description: Some("API Server".to_string()),
+            });
+        }
+
+        // Create path item
+        let path_item = spec.paths.entry(clean_path.clone()).or_insert(PathItem::new());
+
+        // Create operation with better defaults
         let operation = Operation {
-            summary: Some(format!("{} {}", method, path)),
-            description: Some("Added via NUTS CLI".to_string()),
+            summary: Some(format!("{} {}", method, &clean_path)),
+            description: Some("API endpoint".to_string()),
             parameters: None,
-            request_body: None,
+            request_body: if ["POST", "PUT", "PATCH"].contains(&method) {
+                Some(RequestBody {
+                    description: Some("Request payload".to_string()),
+                    required: Some(true),
+                    content: {
+                        let mut content = HashMap::new();
+                        content.insert("application/json".to_string(), MediaType {
+                            schema: Schema {
+                                schema_type: "object".to_string(),
+                                format: None,
+                                properties: None,
+                                items: None,
+                            },
+                            example: Some(serde_json::json!({})),
+                        });
+                        content
+                    },
+                })
+            } else {
+                None
+            },
             responses: {
                 let mut responses = HashMap::new();
                 responses.insert("200".to_string(), Response {
                     description: "Successful response".to_string(),
-                    content: None,
+                    content: Some({
+                        let mut content = HashMap::new();
+                        content.insert("application/json".to_string(), MediaType {
+                            schema: Schema {
+                                schema_type: "object".to_string(),
+                                format: None,
+                                properties: None,
+                                items: None,
+                            },
+                            example: None,
+                        });
+                        content
+                    }),
                 });
                 responses
             },
             security: None,
-            tags: Some(vec![path.split('/').nth(1).unwrap_or("default").to_string()]),
+            tags: Some(vec![clean_path.split('/').nth(1).unwrap_or("default").to_string()]),
+            mock_data: None,
         };
 
         // Add operation to path item
@@ -88,7 +140,7 @@ impl CollectionManager {
         }
 
         spec.save(&spec_path)?;
-        println!("✅ Added {} endpoint {} to collection", method, path);
+        println!("✅ Added {} endpoint {} to collection", method, clean_path);
         Ok(())
     }
 
@@ -206,19 +258,20 @@ impl CollectionManager {
                     println!("⚠️  No valid examples could be parsed from AI response");
                 } else {
                     // Save examples to the OpenAPI spec
+                    let examples_clone = examples.clone();
                     item.mock_data = Some(MockDataConfig {
                         description: "AI-generated mock responses".to_string(),
                         schema: None,
-                        examples: Some(examples.iter().map(|(_, json)| json.clone()).collect()),
+                        examples: Some(examples),
                     });
 
                     spec.save(&spec_path)?;
-                    println!("✅ Generated and saved {} mock examples", examples.len());
+                    println!("✅ Generated and saved {} mock examples", examples_clone.len());
                     
                     // Print example summaries
                     println!("\n📋 Generated mock examples:");
-                    for (i, (desc, _)) in examples.iter().enumerate() {
-                        println!("  {}. {}", i + 1, style(desc).cyan());
+                    for (i, example) in examples_clone.iter().enumerate() {
+                        println!("  {}. {}", i + 1, style(example).cyan());
                     }
                 }
             }
@@ -229,20 +282,39 @@ impl CollectionManager {
         Ok(())
     }
 
-    fn parse_mock_examples(text: &str) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+    fn parse_mock_examples(response: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut examples = Vec::new();
-        
-        // Split by "Description:" to separate examples
-        for section in text.split("Description:").skip(1) {
-            if let Some((desc, json)) = section.split_once('{') {
-                let json = format!("{{{}", json); // Add back the opening brace
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json.trim()) {
-                    examples.push((
-                        desc.trim().to_string(),
-                        serde_json::to_string_pretty(&parsed)?
-                    ));
+        let mut current_json = String::new();
+        let mut in_json = false;
+
+        for line in response.lines() {
+            let line = line.trim();
+            
+            if line.contains("{") {
+                in_json = true;
+                current_json = line.to_string();
+            } else if in_json {
+                current_json.push_str("\n");
+                current_json.push_str(line);
+                
+                if line.contains("}") {
+                    in_json = false;
+                    // Try to parse and validate JSON
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&current_json) {
+                        examples.push(serde_json::to_string_pretty(&parsed)?);
+                    }
+                    current_json.clear();
                 }
             }
+        }
+
+        if examples.is_empty() {
+            // Fallback: create a default example
+            examples.push(serde_json::to_string_pretty(&serde_json::json!({
+                "id": 1,
+                "title": "Example item",
+                "completed": false
+            }))?);
         }
 
         Ok(examples)
@@ -511,73 +583,142 @@ impl CollectionManager {
         Ok(())
     }
 
-    pub fn save_request_to_collection(
+    pub async fn save_request_to_collection(
         &self,
-        collection_name: &str,
+        collection: &str,
         endpoint_name: &str,
         request: &(String, String, Option<String>),
         response: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let (method, url, body) = request;
-        let path = self.get_collection_path(collection_name);
-        
-        let mut spec = if path.exists() {
-            OpenAPISpec::load(&path)?
-        } else {
-            OpenAPISpec::new(collection_name)
-        };
+        let (method, url, _body) = request;
+        let spec_path = self.get_collection_path(collection);
+        let mut spec = OpenAPISpec::load(&spec_path)?;
 
-        // Add the endpoint to the spec
-        let path_item = spec.paths.entry(url.clone()).or_insert(PathItem::new());
+        // Parse URL and setup servers
+        let url = url::Url::parse(&url)?;
+        let base_url = format!("{}://{}", url.scheme(), url.host_str().unwrap_or("localhost"));
         
-        // Create operation with response example
+        // Extract path parameters and clean path
+        let path_segments: Vec<&str> = url.path().split('/').collect();
+        let mut path_params = Vec::new();
+        let clean_path = path_segments.iter().enumerate()
+            .map(|(i, segment)| {
+                if segment.parse::<i64>().is_ok() {
+                    let param_name = if i == path_segments.len() - 1 { "id" } else { &format!("id_{}", i) };
+                    path_params.push(param_name.to_string());
+                    format!("{{{}}}", param_name)
+                } else {
+                    segment.to_string()
+                }
+            })
+            .collect::<Vec<String>>()
+            .join("/");
+
+        // Update servers
+        if !spec.servers.iter().any(|s| s.url == base_url) {
+            spec.servers.clear();
+            spec.servers.push(Server {
+                url: base_url,
+                description: Some("API Server".to_string()),
+            });
+        }
+
+        // Generate AI documentation
+        let doc_prompt = format!(
+            "You are a technical writer creating OpenAPI documentation. \
+            Analyze this API endpoint and generate a clear, detailed description:\n\
+            Path: {}\n\
+            Method: {}\n\
+            Response Example: {}\n\n\
+            Please provide:\n\
+            1. A concise summary (one line)\n\
+            2. A detailed description including:\n\
+               - What the endpoint does\n\
+               - Common use cases\n\
+               - Response structure explanation\n\
+               - Any important notes or considerations",
+            clean_path, method,
+            response.as_deref().unwrap_or("{}")
+        );
+
+        let doc_response = self.get_ai_response(&doc_prompt).await?;
+        let (summary, description) = Self::parse_ai_doc_response(&doc_response)?;
+
+        // Generate mock data
+        let mock_prompt = format!(
+            "Generate diverse test data examples for this endpoint.\n\
+            URL: {}\n\
+            Method: {}\n\
+            Example Response: {}\n\n\
+            Generate 5 different examples covering:\n\
+            1. Happy path\n\
+            2. Edge cases\n\
+            3. Error scenarios\n\
+            4. Special characters\n\
+            5. Boundary values\n\
+            Make each example valid JSON.",
+            clean_path, method,
+            response.as_deref().unwrap_or("{}")
+        );
+
+        let mock_response = self.get_ai_response(&mock_prompt).await?;
+        let mock_examples = Self::parse_mock_examples(&mock_response)?;
+
+        // Create operation with all the generated content
         let operation = Operation {
-            summary: Some(endpoint_name.to_string()),
-            description: Some(format!("Generated from {} request", method)),
-            parameters: None,
-            request_body: body.as_ref().map(|b| RequestBody {
-                description: Some("Request body".to_string()),
-                required: Some(true),
-                content: {
-                    let mut content = HashMap::new();
-                    content.insert("application/json".to_string(), MediaType {
-                        schema: Schema {
-                            schema_type: "object".to_string(),
-                            format: None,
-                            properties: None,
-                            items: None,
-                        },
-                        example: serde_json::from_str(b).ok(),
-                    });
-                    content
-                },
-            }),
+            summary: Some(summary),
+            description: Some(description),
+            parameters: if !path_params.is_empty() {
+                Some(path_params.iter().map(|param| Parameter {
+                    name: param.to_string(),
+                    in_: "path".to_string(),
+                    description: Some(format!("Path parameter {}", param)),
+                    required: true,
+                    schema: Schema {
+                        schema_type: "integer".to_string(),
+                        format: Some("int64".to_string()),
+                        properties: None,
+                        items: None,
+                    },
+                }).collect())
+            } else {
+                None
+            },
             responses: {
                 let mut responses = HashMap::new();
-                responses.insert("200".to_string(), Response {
-                    description: "Successful response".to_string(),
-                    content: response.map(|resp| {
-                        let mut content = HashMap::new();
-                        content.insert("application/json".to_string(), MediaType {
-                            schema: Schema {
-                                schema_type: "object".to_string(),
-                                format: None,
-                                properties: None,
-                                items: None,
-                            },
-                            example: serde_json::from_str(&resp).ok(),
+                if let Some(resp) = response {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp) {
+                        responses.insert("200".to_string(), Response {
+                            description: "Successful response".to_string(),
+                            content: Some({
+                                let mut content = HashMap::new();
+                                content.insert("application/json".to_string(), MediaType {
+                                    schema: Schema {
+                                        schema_type: "object".to_string(),
+                                        properties: None,
+                                        items: None,
+                                        format: None,
+                                    },
+                                    example: Some(json),
+                                });
+                                content
+                            }),
                         });
-                        content
-                    }),
-                });
+                    }
+                }
                 responses
             },
-            security: None,
-            tags: Some(vec![endpoint_name.to_string()]),
+            mock_data: Some(MockDataConfig {
+                description: "AI-generated mock responses".to_string(),
+                schema: None,
+                examples: Some(mock_examples),
+            }),
+            ..Default::default()
         };
 
-        // Add operation based on method
-        match method.as_str() {
+        // Add operation to path item
+        let path_item = spec.paths.entry(clean_path.clone()).or_insert(PathItem::new());
+        match method.to_uppercase().as_str() {
             "GET" => path_item.get = Some(operation),
             "POST" => path_item.post = Some(operation),
             "PUT" => path_item.put = Some(operation),
@@ -586,35 +727,70 @@ impl CollectionManager {
             _ => return Err("Unsupported HTTP method".into()),
         }
 
-        spec.save(&path)?;
-        println!("✅ Saved {} {} to collection {}", method, url, collection_name);
+        spec.save(&spec_path)?;
+        println!("✅ Saved {} {} to collection {} with documentation and mock data", method, url, collection);
         Ok(())
     }
+    async fn get_ai_response(&self, prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
+        let messages = vec![Message {
+            role: Role::User,
+            content: vec![ContentBlock::Text { text: prompt.into() }]
+        }];
 
-    // Add a fallback for when AI is not available
-    async fn run_single_endpoint_test(
-        &self,
-        endpoint: &str,
-        method: &str,
-        users: u32,
-        duration: Duration,
-        base_url: &str
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Running single endpoint test...");
-        let perf = PerfCommand::new(&self.config);
-        let url = if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
-            endpoint.to_string()
+        let request = MessagesRequestBuilder::default()
+            .messages(messages)
+            .model("claude-3-sonnet-20240229".to_string())
+            .max_tokens(2000_usize)
+            .build()?;
+
+        let response = self.ai_client.messages(request).await?;
+        
+        if let Some(ContentBlock::Text { text }) = response.content.first() {
+            Ok(text.clone())
         } else {
-            format!("{}{}", base_url, endpoint)
-        };
-        perf.run(
-            &url,
-            users,
-            duration,
-            method,
-            None
-        ).await
+            Err("No response from AI".into())
+        }
     }
+
+    fn parse_ai_doc_response(response: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
+        let lines: Vec<&str> = response.lines().collect();
+        if let Some((summary, rest)) = lines.split_first() {
+            Ok((
+                summary.trim().to_string(),
+                rest.join("\n").trim().to_string()
+            ))
+        } else {
+            Err("Could not parse AI documentation response".into())
+        }
+    }
+
+
+
+
+// Add a fallback for when AI is not available
+async fn run_single_endpoint_test(
+    &self,
+    endpoint: &str,
+    method: &str,
+    users: u32,
+    duration: Duration,
+    base_url: &str
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Running single endpoint test...");
+    let perf = PerfCommand::new(&self.config);
+    let url = if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
+        endpoint.to_string()
+    } else {
+        format!("{}{}", base_url, endpoint)
+    };
+    perf.run(
+        &url,
+        users,
+        duration,
+        method,
+        None
+    ).await
+}
 
     pub fn get_collections_dir(&self) -> PathBuf {
         self.collections_dir.clone()

@@ -27,17 +27,23 @@ pub struct Server {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct PathItem {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub get: Option<Operation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub post: Option<Operation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub put: Option<Operation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub delete: Option<Operation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub patch: Option<Operation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mock_data: Option<MockDataConfig>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Operation {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
@@ -47,11 +53,14 @@ pub struct Operation {
     pub parameters: Option<Vec<Parameter>>,
     #[serde(rename = "requestBody", skip_serializing_if = "Option::is_none")]
     pub request_body: Option<RequestBody>,
+    #[serde(default)]
     pub responses: HashMap<String, Response>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub security: Option<Vec<HashMap<String, Vec<String>>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mock_data: Option<MockDataConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -84,7 +93,7 @@ pub struct Response {
     pub content: Option<HashMap<String, MediaType>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct Schema {
     #[serde(rename = "type")]
     pub schema_type: String,

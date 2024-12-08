@@ -551,7 +551,7 @@ impl NutsShell {
                                 endpoint_name,
                                 last_request,
                                 Some(last_response.clone()),
-                            )?;
+                            ).await?;
                         } else {
                             println!("❌ No response to save. Make a call first!");
                         }
