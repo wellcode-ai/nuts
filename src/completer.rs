@@ -3,12 +3,38 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{Context, Helper, Result};
+use std::collections::HashMap;
 
-pub struct NutsCompleter;
+pub struct NutsCompleter {
+    commands: HashMap<String, String>,
+}
 
 impl NutsCompleter {
     pub fn new() -> Self {
-        Self
+        let mut commands = HashMap::new();
+        
+        // Core API Testing
+        commands.insert("call".to_string(), "Make API calls: call <METHOD> <URL> [BODY]".to_string());
+        commands.insert("perf".to_string(), "Run performance tests: perf <METHOD> <URL> [OPTIONS]".to_string());
+        commands.insert("security".to_string(), "Security analysis: security <URL> [OPTIONS]".to_string());
+        
+        // Collection Management
+        commands.insert("collection new".to_string(), "Create new collection: collection new <name>".to_string());
+        commands.insert("collection add".to_string(), "Add endpoint: collection add <name> <METHOD> <path>".to_string());
+        commands.insert("collection run".to_string(), "Run endpoint: collection run <name> <endpoint>".to_string());
+        commands.insert("collection docs".to_string(), "Generate docs: collection docs <name> [format]".to_string());
+        commands.insert("collection mock".to_string(), "Start mock server: collection mock <name> [port]".to_string());
+        commands.insert("collection list".to_string(), "List all collections".to_string());
+        commands.insert("collection configure_mock_data".to_string(), "Configure mock data: collection configure_mock_data <name> <endpoint>".to_string());
+        commands.insert("save".to_string(), "Save last request: save <collection> <name>".to_string());
+        
+        // Configuration
+        commands.insert("config api-key".to_string(), "Configure API key".to_string());
+        commands.insert("config show".to_string(), "Show current configuration".to_string());
+        commands.insert("help".to_string(), "Show this help message".to_string());
+        commands.insert("exit".to_string(), "Exit NUTS".to_string());
+
+        Self { commands }
     }
 
     fn get_command_completions(&self, line: &str) -> Vec<String> {

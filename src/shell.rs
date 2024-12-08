@@ -10,6 +10,11 @@ use crate::config::Config;
 use std::path::PathBuf;
 use std::fs;
 use crate::commands::config::ConfigCommand;
+use anthropic::client::ClientBuilder;
+use anthropic::types::Message;
+use anthropic::types::ContentBlock;
+use anthropic::types::MessagesRequestBuilder;
+use anthropic::types::Role;
 
 #[derive(Debug)]
 pub enum ShellError {
@@ -112,7 +117,7 @@ impl NutsShell {
     ███╗   ██╗██╗   ██╗██████████████╗
     ████  ██║█║   ██║╚══██╔══╝██╔════╝
     ██╔██╗ ██║██║   ██║   █║   ╚════██║
-    ██║╚██╗██║██║   ██║   ██║   ╚════██║
+    ██║╚██╗██║██║   ██║   ██║   ╚═════██║
     ██║ ╚████║╚█████╔╝   ██║   ███████║
     ╚═╝  ╚═══╝ ╚═════╝    ╚═╝   ╚══════╝
     "#;
@@ -126,66 +131,40 @@ impl NutsShell {
     }
 
     fn show_help(&self) {
-        // Title and Version
         println!("\n{}", style("🥜 NUTS - Network Universal Testing Suite").cyan().bold());
         println!("{}\n", style("Version 0.1.0").dim());
 
-        // Quick Start
-        println!("{}", style("🚀 Quick Start:").yellow());
-        println!("  {} - Test an API endpoint", style("call GET https://api.example.com").green());
-        println!("  {} - Run performance test", style("perf GET https://api.example.com").green());
-        println!("  {} - Scan for security issues", style("security https://api.example.com").green());
-        println!("");
-
         // Core Commands
-        println!("{}", style("🛠️  Core Commands:").yellow());
-        println!("  {} - Make API calls", style("call [METHOD] URL [BODY]").green());
-        println!("  {} - Run performance tests", style("perf [METHOD] URL [OPTIONS]").green());
-        println!("  {} - Security analysis", style("security [URL]").green());
-        println!("  {} - Start mock server", style("mock [PORT]").green());
-        println!("");
+        println!("{}", style("🌐 API Testing").yellow());
+        println!("  {} - Test an API endpoint", style("call <METHOD> <URL> [BODY]").green());
+        println!("  {} - Run performance tests", style("perf <METHOD> <URL> [OPTIONS]").green());
+        println!("  {} - Scan for security issues", style("security <URL> [OPTIONS]").green());
 
         // Collection Management
-        println!("{}", style("📚 Collections:").yellow());
-        println!("  {} - Create collection", style("collection new <name>").green());
-        println!("  {} - Run collection", style("collection run <name>").green());
-        println!("  {} - Generate docs", style("collection docs <name>").green());
+        println!("\n{}", style("📚 Collections").yellow());
+        println!("  {} - Create new collection", style("collection new <name>").green());
+        println!("  {} - Add endpoint to collection", style("collection add <name> <METHOD> <path>").green());
+        println!("  {} - Run collection endpoint", style("collection run <name> <endpoint>").green());
+        println!("  {} - Generate OpenAPI docs", style("collection docs <name> [format]").green());
         println!("  {} - Save last request", style("save <collection> <name>").green());
-        println!("");
-
-        // Performance Options
-        println!("{}", style("🚄 Performance Options:").yellow());
-        println!("  --users N        Number of concurrent users");
-        println!("  --duration Ns    Test duration in seconds");
-        println!("  Example: {} ", style("perf GET api/users --users 100 --duration 30s").dim());
-        println!("");
+        println!("  {} - List collections", style("collection list").green());
 
         // Mock Server
-        println!("{}", style("🎭 Mock Server:").yellow());
-        println!("  {} - Start mock server", style("collection mock <name>").green());
-        println!("  {} - Configure mocks", style("collection configure_mock_data <name> <endpoint>").green());
-        println!("");
-
-        // System Commands
-        println!("{}", style("⚙️  System:").yellow());
-        println!("  {} - Configure API keys", style("configure").green());
-        println!("  {} - Manage background service", style("daemon [start|stop|status]").green());
-        println!("  {} - Show this help", style("help").green());
-        println!("  {} - Exit NUTS", style("exit").green());
-        println!("");
+        println!("\n{}", style("🎭 Mock Server").yellow());
+        println!("  {} - Start mock server", style("collection mock <name> [port]").green());
+        println!("  {} - Configure mock data", style("collection configure_mock_data <name> <endpoint>").green());
 
         // Configuration
-        println!("{}", style("⚙️  Configuration:").yellow());
-        println!("  {} - Set API key", style("configure api-key").green());
-        println!("  {} - Show current config", style("configure show").green());
+        println!("\n{}", style("⚙️  Configuration").yellow());
+        println!("  {} - Configure API key", style("config api-key").green());
+        println!("  {} - Show current config", style("config show").green());
 
         // Pro Tips
-        println!("{}", style("💡 Pro Tips:").blue());
+        println!("\n{}", style("💡 Tips").blue());
         println!("• Use TAB for command completion");
         println!("• Commands are case-insensitive");
         println!("• Save frequently used calls to collections");
-        println!("• Use --help with any command for detailed options");
-        println!("• Press Ctrl+C to cancel any running operation");
+        println!("• Press Ctrl+C to cancel any operation");
     }
 
     pub async fn process_command(&mut self, cmd: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -584,7 +563,7 @@ impl NutsShell {
                 }
             },
             _ => {
-                if let Some(suggestion) = self.ai_suggest_command(cmd) {
+                if let Some(suggestion) = self.ai_suggest_command(cmd).await {
                     println!("🤖 AI Suggests: {}", style(suggestion).blue());
                 }
             }
@@ -593,10 +572,51 @@ impl NutsShell {
         Ok(())
     }
 
-    fn ai_suggest_command(&self, input: &str) -> Option<String> {
-        // This would integrate with Claude AI
-        // For now, return a mock suggestion
-        Some(format!("Did you mean 'nuts call {}' ?", input))
+    async fn ai_suggest_command(&self, input: &str) -> Option<String> {
+        // Skip if no API key configured
+        let api_key = self.config.anthropic_api_key.as_ref()?;
+        
+        let prompt = format!(
+            "You are a CLI assistant for NUTS (Network Universal Testing Suite). \
+            The user entered an invalid command: '{}'\n\n\
+            Available commands are:\n\
+            - call [METHOD] URL [BODY] - Test an API endpoint\n\
+            - perf [METHOD] URL [OPTIONS] - Run performance tests\n\
+            - collection [new|add|run|mock] - Manage API collections\n\
+            - security URL [OPTIONS] - Scan for security issues\n\
+            - config [api-key|show] - Configure settings\n\
+            - help - Show help\n\n\
+            Suggest the most likely command they meant to use. \
+            Respond with ONLY the suggested command, no explanation.",
+            input
+        );
+
+        // Create AI client
+        let ai_client = ClientBuilder::default()
+            .api_key(api_key.clone())
+            .build()
+            .ok()?;
+
+        // Get AI response directly - no need for block_on
+        match ai_client.messages(MessagesRequestBuilder::default()
+            .messages(vec![Message {
+                role: Role::User,
+                content: vec![ContentBlock::Text { text: prompt }],
+            }])
+            .model("claude-3-sonnet-20240229".to_string())
+            .max_tokens(100_usize)
+            .build()
+            .ok()?
+        ).await {
+            Ok(response) => {
+                if let Some(ContentBlock::Text { text }) = response.content.first() {
+                    Some(text.trim().to_string())
+                } else {
+                    None
+                }
+            }
+            Err(_) => None
+        }
     }
 
     fn store_last_request(&mut self, method: String, url: String, body: Option<String>) {
