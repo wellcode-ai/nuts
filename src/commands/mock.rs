@@ -1,4 +1,4 @@
-use crate::collections::OpenAPISpec;
+use crate::collections::{OpenAPISpec, Operation};
 use std::error::Error;
 use std::net::SocketAddr;
 use axum::{
@@ -8,7 +8,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tracing::{info, warn, error};
 use url;
@@ -23,6 +23,7 @@ use std::sync::Arc;
 use rand::Rng;
 use axum::extract::Path;
 use axum_server::Server;
+use std::future::Future;
 
 pub struct MockServer {
     spec: OpenAPISpec,
@@ -42,28 +43,16 @@ impl MockServer {
             let clean_path = path.replace("{id}", ":id");
             println!("Adding mock endpoint: {}", clean_path);
 
-            let mock_examples = if let Some(op) = &item.get {
-                op.mock_data.as_ref()
-                    .and_then(|m| m.examples.as_ref())
-                    .cloned()
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-
-            let examples = Arc::new(mock_examples);
-            
-            router = router.route(&clean_path, get(move |_params: Path<HashMap<String, String>>| {
-                let examples = examples.clone();
-                async move {
-                    if examples.is_empty() {
-                        (StatusCode::NOT_IMPLEMENTED, String::from("No mock examples found"))
-                    } else {
-                        let idx = rand::random::<usize>() % examples.len();
-                        (StatusCode::OK, examples[idx].clone())
-                    }
-                }
-            }));
+            // Handle each HTTP method
+            if let Some(op) = &item.get {
+                let examples = Arc::new(Self::get_mock_examples(op));
+                router = router.route(&clean_path, get(move |params| Self::handle_request(examples.clone(), params)));
+            }
+            if let Some(op) = &item.post {
+                let examples = Arc::new(Self::get_mock_examples(op));
+                router = router.route(&clean_path, post(move |params| Self::handle_request(examples.clone(), params)));
+            }
+            // Add other methods similarly
         }
 
         println!("🎭 Starting mock server on http://127.0.0.1:{}", self.port);
@@ -75,5 +64,29 @@ impl MockServer {
             .await?;
 
         Ok(())
+    }
+
+    fn get_mock_examples(op: &Operation) -> Vec<String> {
+        op.mock_data.as_ref()
+            .and_then(|m| m.examples.as_ref())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    async fn handle_request(examples: Arc<Vec<String>>, _params: Path<HashMap<String, String>>) -> (StatusCode, Json<Value>) {
+        if examples.is_empty() {
+            (StatusCode::NOT_IMPLEMENTED, Json(json!({
+                "error": "No mock examples found"
+            })))
+        } else {
+            let idx = rand::random::<usize>() % examples.len();
+            let example = &examples[idx];
+            match serde_json::from_str(example) {
+                Ok(json) => (StatusCode::OK, Json(json)),
+                Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+                    "error": "Invalid JSON in mock data"
+                })))
+            }
+        }
     }
 }

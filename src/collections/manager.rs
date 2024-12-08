@@ -449,20 +449,13 @@ impl CollectionManager {
             println!("ℹ️  Testing all GET endpoints...");
             let perf = PerfCommand::new(&self.config);
             for (path, item) in &spec.paths {
-                if let Some(method) = item.get_operation() {
+                if let Some(op) = &item.get {
                     println!("\n🚀 Testing GET {}", style(path).green());
-                    let url = if path.starts_with("http://") || path.starts_with("https://") {
-                        path.to_string()
-                    } else {
-                        format!("{}{}", &base_url, &path)
-                    };
-                    perf.run(
-                        &url,
-                        users,
-                        duration,
-                        "GET",
-                        None
-                    ).await?;
+                    self.run_single_endpoint_test(path, "GET", users, duration, base_url).await?;
+                }
+                if let Some(op) = &item.post {
+                    println!("\n🚀 Testing POST {}", style(path).green());
+                    self.run_single_endpoint_test(path, "POST", users, duration, base_url).await?;
                 }
             }
             return Ok(());
