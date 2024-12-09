@@ -16,6 +16,8 @@ use anthropic::types::ContentBlock;
 use anthropic::types::MessagesRequestBuilder;
 use anthropic::types::Role;
 use indicatif::{ProgressBar, ProgressStyle};
+use std::time::Duration;
+use crate::story::StoryMode;
 
 #[derive(Debug)]
 pub enum ShellError {
@@ -154,6 +156,11 @@ impl NutsShell {
         println!("\n{}", style("🎭 Mock Server").yellow());
         println!("  {} - Start mock server", style("collection mock <name> [port]").green());
         println!("  {} - Configure mock data", style("collection configure_mock_data <name> <endpoint>").green());
+
+        // Add Story Mode section after Mock Server
+        println!("\n{}", style("🎬 Story Mode").yellow());
+        println!("  {} - Start AI-guided API workflow", style("collection story <name>").green());
+        println!("  {} - Quick story mode alias", style("collection s <name>").green());
 
         // Configuration
         println!("\n{}", style("⚙️  Configuration").yellow());
@@ -506,6 +513,19 @@ impl NutsShell {
                     Some("list") => {
                         println!("📋 Available collections:");
                         self.collection_manager.list_collections().await?;
+                    }
+                    Some("story") | Some("s") => {
+                        if let Some(collection) = parts.get(2) {
+                            let api_key = self.config.anthropic_api_key.clone()
+                                .ok_or("API key not configured. Use 'config api-key' to set it")?;
+                            
+                            StoryMode::new(collection.to_string(), api_key)
+                                .start(&mut self.editor)
+                                .await?;
+                        } else {
+                            println!("❌ Usage: story <collection>");
+                            println!("Start an AI-guided API story session");
+                        }
                     }
                     _ => {
                         println!("Available collection commands:");

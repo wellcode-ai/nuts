@@ -13,11 +13,10 @@ pub struct NutsCompleter {
 impl NutsCompleter {
     pub fn new() -> Self {
         let mut commands = HashMap::new();
-        let mut aliases = HashMap::new();
         
         // Core API Testing
         commands.insert("call".to_string(), "Examples:\n  call GET https://api.example.com/users\n  call POST https://api.example.com/users '{\"name\":\"test\"}'".to_string());
-        commands.insert("perf".to_string(), "Examples:\n  perf GET https://api.example.com/users --users 100 --duration 30s\n  perf POST https://api.example.com/users '{\"name\":\"test\"}' --users 50".to_string());
+        commands.insert("perf".to_string(), "Examples:\n  perf GET https://api.example.com/users --users 100 --duration 30s".to_string());
         commands.insert("security".to_string(), "Security analysis: security <URL> [OPTIONS]".to_string());
         
         // Collection Management
@@ -28,6 +27,8 @@ impl NutsCompleter {
         commands.insert("collection mock".to_string(), "Start mock server: collection mock <name> [port]".to_string());
         commands.insert("collection list".to_string(), "List all collections".to_string());
         commands.insert("collection configure_mock_data".to_string(), "Configure mock data: collection configure_mock_data <name> <endpoint>".to_string());
+        commands.insert("collection story".to_string(), "Start AI-guided API workflow: collection story <name>".to_string());
+        commands.insert("collection s".to_string(), "Quick story mode alias: collection s <name>".to_string());
         commands.insert("save".to_string(), "Save last request: save <collection> <name>".to_string());
         
         // Configuration
@@ -37,9 +38,10 @@ impl NutsCompleter {
         commands.insert("exit".to_string(), "Exit NUTS".to_string());
 
         // Add aliases
+        let mut aliases = HashMap::new();
         aliases.insert("c".to_string(), "call".to_string());
         aliases.insert("p".to_string(), "perf".to_string());
-        aliases.insert("s".to_string(), "security".to_string());
+        aliases.insert("s".to_string(), "collection story".to_string());
         aliases.insert("h".to_string(), "help".to_string());
         aliases.insert("q".to_string(), "quit".to_string());
 

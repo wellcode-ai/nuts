@@ -2,9 +2,10 @@ mod commands;
 mod shell;
 mod completer;
 mod models;
-use shell::NutsShell;
-pub mod config;
+mod config;
 mod collections;
+mod story;
+use shell::NutsShell;
 use clap::{Command, Arg};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
