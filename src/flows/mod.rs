@@ -119,7 +119,7 @@ impl OpenAPISpec {
             info: Info {
                 title: name.to_string(),
                 version: "1.0.0".to_string(),
-                description: Some(format!("API collection for {}", name)),
+                description: Some(format!("API flow for {}", name)),
             },
             servers: vec![Server {
                 url: "http://localhost:3000".to_string(),

@@ -5,7 +5,7 @@ use rustyline::history::DefaultHistory;
 use crate::commands::call::CallCommand;
 use crate::commands::security::SecurityCommand;
 use crate::commands::perf::PerfCommand;
-use crate::collections::manager::CollectionManager;
+use crate::flows::manager::CollectionManager;
 use crate::config::Config;
 use std::path::PathBuf;
 use std::fs;
@@ -65,11 +65,11 @@ impl NutsShell {
 
     pub fn new() -> Self {
         let collections_dir = dirs::home_dir()
-            .map(|h| h.join(".nuts").join("collections"))
+            .map(|h| h.join(".nuts").join("flows"))
             .expect("Could not determine home directory");
             
         std::fs::create_dir_all(&collections_dir)
-            .expect("Failed to create collections directory");
+            .expect("Failed to create flows directory");
 
         // Load config first
         let config = Config::load().unwrap_or_default();
@@ -143,24 +143,24 @@ impl NutsShell {
         println!("  {} - Run performance tests", style("perf <METHOD> <URL> [OPTIONS]").green());
         println!("  {} - Scan for security issues", style("security <URL> [OPTIONS]").green());
 
-        // Collection Management
-        println!("\n{}", style("📚 Collections").yellow());
-        println!("  {} - Create new collection", style("collection new <name>").green());
-        println!("  {} - Add endpoint to collection", style("collection add <name> <METHOD> <path>").green());
-        println!("  {} - Run collection endpoint", style("collection run <name> <endpoint>").green());
-        println!("  {} - Generate OpenAPI docs", style("collection docs <name> [format]").green());
-        println!("  {} - Save last request", style("save <collection> <name>").green());
-        println!("  {} - List collections", style("collection list").green());
+        // Flow Management
+        println!("\n{}", style("📚 sFlow").yellow());
+        println!("  {} - Create new flow", style("flow new <name>").green());
+        println!("  {} - Add endpoint to flow", style("flow add <name> <METHOD> <path>").green());
+        println!("  {} - Run flow endpoint", style("flow run <name> <endpoint>").green());
+        println!("  {} - Generate OpenAPI docs", style("flow docs <name> [format]").green());
+        println!("  {} - Save last request", style("save <flow> <name>").green());
+        println!("  {} - List flows", style("flow list").green());
 
         // Mock Server
         println!("\n{}", style("🎭 Mock Server").yellow());
-        println!("  {} - Start mock server", style("collection mock <name> [port]").green());
-        println!("  {} - Configure mock data", style("collection configure_mock_data <name> <endpoint>").green());
+        println!("  {} - Start mock server", style("flow mock <name> [port]").green());
+        println!("  {} - Configure mock data", style("flow configure_mock_data <name> <endpoint>").green());
 
         // Add Story Mode section after Mock Server
         println!("\n{}", style("🎬 Story Mode").yellow());
-        println!("  {} - Start AI-guided API workflow", style("collection story <name>").green());
-        println!("  {} - Quick story mode alias", style("collection s <name>").green());
+        println!("  {} - Start AI-guided API workflow", style("flow story <name>").green());
+        println!("  {} - Quick story mode alias", style("flow s <name>").green());
 
         // Configuration
         println!("\n{}", style("⚙️  Configuration").yellow());
@@ -171,7 +171,7 @@ impl NutsShell {
         println!("\n{}", style("💡 Tips").blue());
         println!("• Use TAB for command completion");
         println!("• Commands are case-insensitive");
-        println!("• Save frequently used calls to collections");
+        println!("• Save frequently used calls to flows");
         println!("• Press Ctrl+C to cancel any operation");
     }
 
@@ -385,56 +385,56 @@ impl NutsShell {
                     .execute(&parts.iter().map(|s| s.to_string()).collect::<Vec<String>>())
                     .await?;
             }
-            Some("collection") => {
+            Some("flow") => {
                 match parts.get(1).map(String::as_str) {
                     Some("new") => {
                         if let Some(name) = parts.get(2) {
-                            println!("🔨 Creating new OpenAPI collection: {}", style(name).cyan());
+                            println!("🔨 Creating new OpenAPI flow: {}", style(name).cyan());
                             self.collection_manager.create_collection(name)?;
-                            println!("✅ Collection created. Use 'collection add {}' to add endpoints", name);
+                            println!("✅ Flow created. Use 'flow add {}' to add endpoints", name);
                         } else {
-                            println!("❌ Usage: collection new <name>");
-                            println!("Creates a new OpenAPI specification collection");
+                            println!("❌ Usage: flow new <name>");
+                            println!("Creates a new OpenAPI specification flow");
                         }
                     }
                     Some("add") => {
                         if parts.len() >= 4 {
-                            let collection = &parts[2];
+                            let flow = &parts[2];
                             let method = parts[3].to_uppercase();
                             let path = parts.get(4).map(|s| s.to_string());
                             
                             match (method.as_str(), path) {
                                 (m, Some(p)) if ["GET", "POST", "PUT", "DELETE", "PATCH"].contains(&m) => {
-                                    println!("📝 Adding {} endpoint {} to collection {}", 
+                                    println!("📝 Adding {} endpoint {} to flow {}", 
                                         style(m).cyan(),
                                         style(&p).green(),
-                                        style(collection).yellow()
+                                        style(flow).yellow()
                                     );
-                                    self.collection_manager.add_endpoint(collection, m, &p).await?;
+                                    self.collection_manager.add_endpoint(flow, m, &p).await?;
                                 },
                                 _ => {
-                                    println!("❌ Usage: collection add <name> <METHOD> <path>");
-                                    println!("Example: collection add my-api GET /users");
+                                    println!("❌ Usage: flow add <name> <METHOD> <path>");
+                                    println!("Example: flow add my-api GET /users");
                                     println!("Supported methods: GET, POST, PUT, DELETE, PATCH");
                                 }
                             }
                         } else {
-                            println!("❌ Usage: collection add <name> <METHOD> <path>");
+                            println!("❌ Usage: flow add <name> <METHOD> <path>");
                         }
                     }
                     Some("run") => {
                         if parts.len() >= 4 {
-                            let collection = &parts[2];
+                            let flow = &parts[2];
                             let endpoint = &parts[3];
                             let args = &parts[4..];
-                            println!("🚀 Running endpoint {} from collection {}", 
+                            println!("🚀 Running endpoint {} from flow {}", 
                                 style(endpoint).green(),
-                                style(collection).yellow()
+                                style(flow).yellow()
                             );
-                            self.collection_manager.run_endpoint(collection, endpoint, args).await?;
+                            self.collection_manager.run_endpoint(flow, endpoint, args).await?;
                         } else {
-                            println!("❌ Usage: collection run <name> <endpoint> [args...]");
-                            println!("Example: collection run my-api /users --data '{{\"name\": \"test\"}}'");
+                            println!("❌ Usage: flow run <name> <endpoint> [args...]");
+                            println!("Example: flow run my-api /users --data '{{\"name\": \"test\"}}'");
                         }
                     }
                     Some("mock") => {
@@ -442,53 +442,53 @@ impl NutsShell {
                             let port = parts.get(3)
                                 .and_then(|p| p.parse().ok())
                                 .unwrap_or(3000);
-                            println!("🎭 Starting mock server for collection {} on port {}", 
+                            println!("🎭 Starting mock server for flow {} on port {}", 
                                 style(name).yellow(),
                                 style(port).cyan()
                             );
                             self.collection_manager.start_mock_server(name, port).await?;
                         } else {
-                            println!("❌ Usage: collection mock <name> [port]");
+                            println!("❌ Usage: flow mock <name> [port]");
                             println!("Starts a mock server based on OpenAPI specification");
                         }
                     }
                     Some("configure_mock_data") => {
                         if parts.len() >= 4 {
-                            let collection = &parts[2];
+                            let flow = &parts[2];
                             let endpoint = &parts[3];
-                            println!("⚙️  Configuring mock data for endpoint {} in collection {}", 
+                            println!("⚙️  Configuring mock data for endpoint {} in flow {}", 
                                 style(endpoint).green(),
-                                style(collection).yellow()
+                                style(flow).yellow()
                             );
                             self.collection_manager.configure_mock_data(
-                                collection, 
+                                flow, 
                                 endpoint,
                                 &mut self.editor
                             ).await?;
                         } else {
-                            println!("❌ Usage: collection configure_mock_data <name> <endpoint>");
-                            println!("Example: collection configure_mock_data my-api /users");
+                            println!("❌ Usage: flow configure_mock_data <name> <endpoint>");
+                            println!("Example: flow configure_mock_data my-api /users");
                         }
                     }
                     Some("perf") => {
-                        let collection = parts.get(2)
-                            .ok_or("Usage: collection perf <name> [endpoint] [--users N] [--duration Ns]")?;
+                        let flow = parts.get(2)
+                            .ok_or("Usage: flow perf <name> [endpoint] [--users N] [--duration Ns]")?;
                         let endpoint = parts.get(3);
                         let options = &parts[if endpoint.is_some() { 4 } else { 3 }..];
                         
                         if endpoint.is_some() {
-                            println!("🚄 Running performance test for endpoint {} in collection {}", 
+                            println!("🚄 Running performance test for endpoint {} in flow {}", 
                                 style(endpoint.unwrap()).green(),
-                                style(collection).yellow()
+                                style(flow).yellow()
                             );
                         } else {
-                            println!("🚄 Running performance tests for collection {}", 
-                                style(collection).yellow()
+                            println!("🚄 Running performance tests for flow {}", 
+                                style(flow).yellow()
                             );
                         }
                         
                         self.collection_manager.run_endpoint_perf(
-                            collection,
+                            flow,
                             endpoint.map(String::as_str),
                             options
                         ).await?;
@@ -498,7 +498,7 @@ impl NutsShell {
                             let format = parts.get(3).map(String::as_str).unwrap_or("yaml");
                             match format {
                                 "yaml" | "json" => {
-                                    println!("📚 Generating OpenAPI documentation for collection {}", 
+                                    println!("📚 Generating OpenAPI documentation for flow {}", 
                                         style(name).yellow()
                                     );
                                     self.collection_manager.generate_openapi(name, format).await?;
@@ -506,37 +506,37 @@ impl NutsShell {
                                 _ => println!("❌ Supported formats: yaml, json")
                             }
                         } else {
-                            println!("❌ Usage: collection docs <name> [format]");
+                            println!("❌ Usage: flow docs <name> [format]");
                             println!("Generates OpenAPI documentation (yaml or json)");
                         }
                     }
                     Some("list") => {
-                        println!("📋 Available collections:");
+                        println!("📋 Available flows:");
                         self.collection_manager.list_collections().await?;
                     }
                     Some("story") | Some("s") => {
-                        if let Some(collection) = parts.get(2) {
+                        if let Some(flow) = parts.get(2) {
                             let api_key = self.config.anthropic_api_key.clone()
                                 .ok_or("API key not configured. Use 'config api-key' to set it")?;
                             
-                            StoryMode::new(collection.to_string(), api_key)
+                            StoryMode::new(flow.to_string(), api_key)
                                 .start(&mut self.editor)
                                 .await?;
                         } else {
-                            println!("❌ Usage: story <collection>");
+                            println!("❌ Usage: story <flow>");
                             println!("Start an AI-guided API story session");
                         }
                     }
                     _ => {
-                        println!("Available collection commands:");
-                        println!("  {} - Create new collection", style("new <name>").green());
-                        println!("  {} - Add endpoint to collection", style("add <name> <METHOD> <path>").green());
+                        println!("Available flow commands:");
+                        println!("  {} - Create new flow", style("new <name>").green());
+                        println!("  {} - Add endpoint to flow", style("add <name> <METHOD> <path>").green());
                         println!("  {} - Run specific endpoint", style("run <name> <endpoint> [args...]").green());
                         println!("  {} - Start mock server", style("mock <name> [port]").green());
                         println!("  {} - Configure mock responses", style("configure_mock_data <name> <endpoint>").green());
                         println!("  {} - Run performance tests", style("perf <name> <endpoint> [options]").green());
                         println!("  {} - Generate OpenAPI docs", style("docs <name> [format]").green());
-                        println!("  {} - List all collections", style("list").green());
+                        println!("  {} - List all flows", style("list").green());
                     }
                 }
             }
@@ -564,10 +564,10 @@ impl NutsShell {
             }
             Some("configure_mock_data") => {
                 if parts.len() >= 3 {
-                    let collection = &parts[1];
+                    let flow = &parts[1];
                     let endpoint = &parts[2];
                     self.collection_manager.configure_mock_data(
-                        collection, 
+                        flow, 
                         endpoint,
                         &mut self.editor
                     ).await?;
@@ -603,7 +603,7 @@ impl NutsShell {
             Available commands are:\n\
             - call [METHOD] URL [BODY] - Test an API endpoint\n\
             - perf [METHOD] URL [OPTIONS] - Run performance tests\n\
-            - collection [new|add|run|mock] - Manage API collections\n\
+            - flow [new|add|run|mock] - Manage API flows\n\
             - security URL [OPTIONS] - Scan for security issues\n\
             - config [api-key|show] - Configure settings\n\
             - help - Show help\n\n\

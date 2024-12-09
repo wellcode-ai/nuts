@@ -5,6 +5,7 @@ use rustyline::validate::Validator;
 use rustyline::{Context, Helper, Result};
 use std::collections::HashMap;
 
+#[derive(Clone, Default)]
 pub struct NutsCompleter {
     commands: HashMap<String, String>,
     aliases: HashMap<String, String>,
@@ -19,17 +20,17 @@ impl NutsCompleter {
         commands.insert("perf".to_string(), "Examples:\n  perf GET https://api.example.com/users --users 100 --duration 30s".to_string());
         commands.insert("security".to_string(), "Security analysis: security <URL> [OPTIONS]".to_string());
         
-        // Collection Management
-        commands.insert("collection new".to_string(), "Create new collection: collection new <name>".to_string());
-        commands.insert("collection add".to_string(), "Add endpoint: collection add <name> <METHOD> <path>".to_string());
-        commands.insert("collection run".to_string(), "Run endpoint: collection run <name> <endpoint>".to_string());
-        commands.insert("collection docs".to_string(), "Generate docs: collection docs <name> [format]".to_string());
-        commands.insert("collection mock".to_string(), "Start mock server: collection mock <name> [port]".to_string());
-        commands.insert("collection list".to_string(), "List all collections".to_string());
-        commands.insert("collection configure_mock_data".to_string(), "Configure mock data: collection configure_mock_data <name> <endpoint>".to_string());
-        commands.insert("collection story".to_string(), "Start AI-guided API workflow: collection story <name>".to_string());
-        commands.insert("collection s".to_string(), "Quick story mode alias: collection s <name>".to_string());
-        commands.insert("save".to_string(), "Save last request: save <collection> <name>".to_string());
+        // Flow Management
+        commands.insert("flow new".to_string(), "Create new flow: flow new <name>".to_string());
+        commands.insert("flow add".to_string(), "Add endpoint: flow add <name> <METHOD> <path>".to_string());
+        commands.insert("flow run".to_string(), "Run endpoint: flow run <name> <endpoint>".to_string());
+        commands.insert("flow docs".to_string(), "Generate docs: flow docs <name> [format]".to_string());
+        commands.insert("flow mock".to_string(), "Start mock server: flow mock <name> [port]".to_string());
+        commands.insert("flow list".to_string(), "List all flows".to_string());
+        commands.insert("flow configure_mock_data".to_string(), "Configure mock data: flow configure_mock_data <name> <endpoint>".to_string());
+        commands.insert("flow story".to_string(), "Start AI-guided API workflow: flow story <name>".to_string());
+        commands.insert("flow s".to_string(), "Quick story mode alias: flow s <name>".to_string());
+        commands.insert("save".to_string(), "Save last request: save <flow> <name>".to_string());
         
         // Configuration
         commands.insert("config api-key".to_string(), "Configure API key".to_string());
@@ -41,7 +42,7 @@ impl NutsCompleter {
         let mut aliases = HashMap::new();
         aliases.insert("c".to_string(), "call".to_string());
         aliases.insert("p".to_string(), "perf".to_string());
-        aliases.insert("s".to_string(), "collection story".to_string());
+        aliases.insert("s".to_string(), "flow story".to_string());
         aliases.insert("h".to_string(), "help".to_string());
         aliases.insert("q".to_string(), "quit".to_string());
 
@@ -58,17 +59,17 @@ impl NutsCompleter {
 
         // Base commands
         let base_commands = vec![
-            "call", "perf", "mock", "security", "collection", "configure", "help", "exit"
+            "call", "perf", "mock", "security", "flow", "configure", "help", "exit"
         ];
 
         // HTTP methods
         let http_methods = vec!["GET", "POST", "PUT", "DELETE", "PATCH"];
 
-        // Collection subcommands
+        // Flow subcommands
         let collection_commands = vec![
-            "collection new", "collection add", "collection run",
-            "collection mock", "collection perf", "collection docs",
-            "collection list"
+            "flow new", "flow add", "flow run",
+            "flow mock", "flow perf", "flow docs",
+            "flow list"
         ];
 
         // Options
@@ -83,7 +84,7 @@ impl NutsCompleter {
             }
         }).flatten());
 
-        // Add collection commands
+        // Add flow commands
         completions.extend(collection_commands.iter().map(|&cmd| {
             if cmd.starts_with(line) {
                 Some(cmd.to_string())

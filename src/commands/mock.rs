@@ -1,4 +1,4 @@
-use crate::collections::{OpenAPISpec, Operation};
+use crate::flows::{OpenAPISpec, Operation};
 use std::error::Error;
 use std::net::SocketAddr;
 use axum::{

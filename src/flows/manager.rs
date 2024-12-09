@@ -1,4 +1,4 @@
-use crate::collections::*;
+use crate::flows::*;
 use crate::commands::perf::PerfCommand;
 use rustyline::Editor;
 use std::path::PathBuf;
@@ -44,17 +44,17 @@ impl CollectionManager {
         let template = OpenAPISpec::new(name);
         template.save(&path)?;
         
-        println!("✅ Created OpenAPI collection at: {}", path.display());
+        println!("✅ Created OpenAPI flow at: {}", path.display());
         Ok(())
     }
 
     pub async fn add_endpoint(
         &self,
-        collection: &str,
+        flow: &str,
         method: &str,
         path: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let spec_path = self.get_collection_path(collection);
+        let spec_path = self.get_collection_path(flow);
         let mut spec = OpenAPISpec::load(&spec_path)?;
 
         // Parse and clean the URL/path
@@ -140,23 +140,23 @@ impl CollectionManager {
         }
 
         spec.save(&spec_path)?;
-        println!("✅ Added {} endpoint {} to collection", method, clean_path);
+        println!("✅ Added {} endpoint {} to flow", method, clean_path);
         Ok(())
     }
 
     pub async fn run_endpoint(
         &self,
-        collection: &str,
+        flow: &str,
         endpoint: &str,
         _args: &[String]
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let spec_path = self.get_collection_path(collection);
+        let spec_path = self.get_collection_path(flow);
         let spec = OpenAPISpec::load(&spec_path)?;
 
         // Find the endpoint in the spec
         let (path, item) = spec.paths.iter()
             .find(|(p, _)| p.contains(endpoint))
-            .ok_or("Endpoint not found in collection")?;
+            .ok_or("Endpoint not found in flow")?;
 
         // Determine method and operation
         let (method, _operation) = item.get_operation()
@@ -189,7 +189,7 @@ impl CollectionManager {
 
     pub async fn configure_mock_data(
         &self,
-        collection: &str,
+        flow: &str,
         endpoint: &str,
         editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -202,7 +202,7 @@ impl CollectionManager {
             return Err("API key is empty. Use 'config api-key' to set it".into());
         }
 
-        let spec_path = self.get_collection_path(collection);
+        let spec_path = self.get_collection_path(flow);
         let mut spec = OpenAPISpec::load(&spec_path)?;
 
         println!("Available endpoints:");
@@ -276,7 +276,7 @@ impl CollectionManager {
                 }
             }
         } else {
-            println!("❌ Endpoint not found in collection: {}", endpoint);
+            println!("❌ Endpoint not found in flow: {}", endpoint);
         }
 
         Ok(())
@@ -404,11 +404,11 @@ impl CollectionManager {
 
     pub async fn run_endpoint_perf(
         &self,
-        collection: &str,
+        flow: &str,
         endpoint: Option<&str>,
         options: &[String]
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let spec_path = self.get_collection_path(collection);
+        let spec_path = self.get_collection_path(flow);
         let spec = OpenAPISpec::load(&spec_path)?;
         let (users, duration) = Self::parse_options(options).await?;
         let base_url = spec.servers.first()
@@ -417,7 +417,7 @@ impl CollectionManager {
 
         // If no specific endpoint is provided, analyze all endpoints
         if endpoint.is_none() {
-            println!("🔍 Analyzing collection endpoints...");
+            println!("🔍 Analyzing flow endpoints...");
             
             // Try AI flow generation if API key is available
             if self.config.api_key.is_some() {
@@ -465,7 +465,7 @@ impl CollectionManager {
         let endpoint = endpoint.unwrap();
         let item = spec.paths.iter()
             .find(|(p, _)| p.contains(endpoint))
-            .ok_or("Endpoint not found in collection")?
+            .ok_or("Endpoint not found in flow")?
             .1;
         
         let (method, _operation) = item.get_operation()
@@ -578,13 +578,13 @@ impl CollectionManager {
 
     pub async fn save_request_to_collection(
         &self,
-        collection: &str,
+        flow: &str,
         endpoint_name: &str,
         request: &(String, String, Option<String>),
         response: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (method, url, _body) = request;
-        let spec_path = self.get_collection_path(collection);
+        let spec_path = self.get_collection_path(flow);
         let mut spec = OpenAPISpec::load(&spec_path)?;
 
         // Parse URL and setup servers
@@ -721,7 +721,7 @@ impl CollectionManager {
         }
 
         spec.save(&spec_path)?;
-        println!("✅ Saved {} {} to collection {} with documentation and mock data", method, url, collection);
+        println!("✅ Saved {} {} to flow {} with documentation and mock data", method, url, flow);
         Ok(())
     }
     async fn get_ai_response(&self, prompt: &str) -> Result<String, Box<dyn std::error::Error>> {

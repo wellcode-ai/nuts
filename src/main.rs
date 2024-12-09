@@ -3,7 +3,7 @@ mod shell;
 mod completer;
 mod models;
 mod config;
-mod collections;
+mod flows;
 mod story;
 use shell::NutsShell;
 use clap::{Command, Arg};

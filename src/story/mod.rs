@@ -9,23 +9,23 @@ use anthropic::{
 };
 use std::collections::HashMap;
 use serde_json::Value;
-use crate::collections::{OpenAPISpec, PathItem, Operation, RequestBody, Response, MediaType, Schema};
+use crate::flows::{OpenAPISpec, PathItem, Operation, RequestBody, Response, MediaType, Schema};
 use url::Url;
 use crate::config::Config;
-use crate::collections::manager::CollectionManager;
+use crate::flows::manager::CollectionManager;
 
 pub struct StoryMode {
-    collection: String,
+    flow: String,
     api_key: String,
 }
 
 impl StoryMode {
-    pub fn new(collection: String, api_key: String) -> Self {
-        Self { collection, api_key }
+    pub fn new(flow: String, api_key: String) -> Self {
+        Self { flow, api_key }
     }
 
     pub async fn start(&self, editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("\n🎬 Starting API Story Mode for {}", style(&self.collection).cyan());
+        println!("\n🎬 Starting API Story Mode for {}", style(&self.flow).cyan());
         println!("Tell me what you want to build, and I'll guide you through the API flow.");
         println!("Type 'exit' to end the story mode.\n");
 
@@ -40,21 +40,21 @@ impl StoryMode {
                 spinner.finish_and_clear();
                 println!("\n{}", suggestion);
                 
-                if let Ok(answer) = editor.readline("Would you like to save this API design to the collection? (y/n) > ") {
+                if let Ok(answer) = editor.readline("Would you like to save this API design to the flow? (y/n) > ") {
                     if answer.trim().eq_ignore_ascii_case("y") {
                         self.save_story(&suggestion).await?;
                         
                         if let Ok(mock_answer) = editor.readline("Would you like to start the mock server? (y/n) > ") {
                             if mock_answer.trim().eq_ignore_ascii_case("y") {
                                 println!("Starting mock server...");
-                                // Start mock server using collection manager
+                                // Start mock server using flow manager
                                 let collections_dir = dirs::home_dir()
                                     .ok_or("Could not find home directory")?
                                     .join(".nuts")
-                                    .join("collections");
+                                    .join("flows");
                                 let config = Config::load()?;
                                 let manager = CollectionManager::new(collections_dir, config);
-                                manager.start_mock_server(&self.collection, 3000).await?;
+                                manager.start_mock_server(&self.flow, 3000).await?;
                             }
                         }
                     }
@@ -82,7 +82,7 @@ impl StoryMode {
 
         let prompt = format!(
             "You are an API workflow assistant. Help the user achieve their goal:\n\
-            Collection: {}\n\
+            Flow: {}\n\
             User goal: {}\n\n\
             Suggest a sequence of API calls to achieve this goal. For each step:\n\
             1. Provide a brief description\n\
@@ -97,7 +97,7 @@ impl StoryMode {
             2. Get user details\n\
             GET http://localhost:3000/users/123\n\n\
             Keep responses concise and executable. Use only localhost URLs.",
-            self.collection, goal
+            self.flow, goal
         );
 
         match ai_client.messages(MessagesRequestBuilder::default()
@@ -242,18 +242,18 @@ impl StoryMode {
             }
         }
 
-        // Save to collection file
+        // Save to flow file
         let spec_path = dirs::home_dir()
             .ok_or("Could not find home directory")?
             .join(".nuts")
-            .join("collections")
-            .join(format!("{}.yaml", self.collection));
+            .join("flows")
+            .join(format!("{}.yaml", self.flow));
 
         let mut spec = OpenAPISpec::load(&spec_path)?;
         spec.paths.extend(paths);
         spec.save(&spec_path)?;
 
-        println!("\n✅ Saved API flow to collection {}", style(&self.collection).green());
+        println!("\n✅ Saved API flow to flow {}", style(&self.flow).green());
         Ok(())
     }
 } 

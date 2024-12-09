@@ -12,7 +12,7 @@ pub type CommandResult = Result<(), Box<dyn std::error::Error>>;
 // Add shared command context
 #[derive(Clone)]
 pub struct CommandContext {
-    pub collections: Arc<crate::collections::CollectionManager>,
+    pub flows: Arc<crate::flows::CollectionManager>,
 }
 
 // Add shared command traits
