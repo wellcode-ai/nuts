@@ -1,5 +1,5 @@
 # Nuts
-testtest
+
 A command-line tool for [describe your tool's purpose].
 
 ## Installation
