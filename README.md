@@ -1,4 +1,4 @@
-# Nuts
+# Nutstest
 
 A command-line tool for [describe your tool's purpose].
 
