@@ -1,8 +1,6 @@
 # Nuts
  
-Nuts is a command line tools to run endpoint and also have a bunch of tools like performance tools and ai security test
-
-## Installation
+Nuts is a 
 
 ### From Releases
 
