@@ -1,6 +1,6 @@
 # Nuts
  
-A command-line tool for [describe your tool's purpose].
+A command-line tool for purpossse
 
 ## Installation
 
