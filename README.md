@@ -1,6 +1,6 @@
 # Nuts
  
-A command-line tool for curl plopppppp
+A command-line tool for curl hkjhjkhjk
 
 ## Installation
 
