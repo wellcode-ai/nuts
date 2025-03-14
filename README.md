@@ -1,6 +1,6 @@
 # Nuts
  
-A command-line tool for curl curl
+A command-line tool for curl plop
 
 ## Installation
 
