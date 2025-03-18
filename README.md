@@ -1,6 +1,5 @@
 # Nuts
 
-Experimentation this
 
 ### From Releases
 
