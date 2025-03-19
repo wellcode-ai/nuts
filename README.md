@@ -1,6 +1,6 @@
 # Nuts
 
-Beautiful mad day
+ day
 
 ### From Releases
 
