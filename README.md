@@ -1,6 +1,6 @@
 # Nuts
 
-The best curl ever
+The best curl ever EVER
 
 ### From Releases
 
