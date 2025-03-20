@@ -1,6 +1,6 @@
 # Nuts
 
-The best curl ever EVER, one more time, second time, one more test, one more time
+The best curl ever
 
 ### From Releases
 
