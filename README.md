@@ -1,6 +1,6 @@
 # Nuts
 
-The best curl ever THE CRL THE ONE BIGGEST ONE
+The best curl ever THE CRL THE ONE BIGGEST ONE BIG BIG
 
 ### From Releases
 
