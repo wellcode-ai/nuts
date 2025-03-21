@@ -2,10 +2,6 @@
 
 NUTS is here not yet
 das
-d
-as
-das
-dsa
 ### From Releases
 
 1. Download the appropriate binary for your system from the [releases page](https://github.com/wellcode-ai/nuts/releases)
