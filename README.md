@@ -1,6 +1,6 @@
 # Nuts
 
-The best curl ever dasd;'las'dplas;dl;asdasdas
+The best curl everin the world
 
 ### From Releases
 
