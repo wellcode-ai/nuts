@@ -1,7 +1,6 @@
 # Nuts
 
-The best curl everin the world
-not yet
+NUTS is here not yet
 das
 d
 as
