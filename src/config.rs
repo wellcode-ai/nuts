@@ -8,21 +8,6 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        let mut config = Config::default();
-        
-        // Load from env vars
-        if let Ok(key) = std::env::var("NUTS_API_KEY") {
-            config.anthropic_api_key = Some(key);
-        }
-        
-        // Load from config file
-        if let Ok(file_config) = Config::load_from_file() {
-            config = config.merge(file_config);
-        }
-        
-        Ok(config)
-    }
 
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let path = Self::config_path()?;
