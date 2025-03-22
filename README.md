@@ -1,6 +1,12 @@
 # Nuts
 
-NUTS is THE CURL of 2025 curl testout
+NUTS is THE CURL of 2025 curl testoutjd;lask;dosak;od kas
+dasjdkl;asl
+dsads
+ad
+as
+fdas
+dasda
 ### From Releases
 
 1. Download the appropriate binary for your system from the [releases page](https://github.com/wellcode-ai/nuts/releases)
