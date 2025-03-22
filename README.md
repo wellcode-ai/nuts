@@ -1,6 +1,6 @@
 # Nuts
 
-Nuts, the new curl
+Nuts, the new curlito
 
 ### From Releases
 
