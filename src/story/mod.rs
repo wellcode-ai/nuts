@@ -19,52 +19,6 @@ pub struct StoryMode {
     api_key: String,
 }
 
-impl StoryMode {
-    pub fn new(flow: String, api_key: String) -> Self {
-        Self { flow, api_key }
-    }
-
-    pub async fn start(&self, editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("\n🎬 Starting API Story Mode for {}", style(&self.flow).cyan());
-        println!("Tell me what you want to build, and I'll guide you through the API flow.");
-        println!("Type 'exit' to end the story mode.\n");
-
-        loop {
-            let input = editor.readline("📝 What do you want to do? > ")?;
-            if input.trim() == "exit" {
-                break;
-            }
-
-            let spinner = self.show_thinking_spinner();
-            if let Some(suggestion) = self.get_suggestion(&input).await {
-                spinner.finish_and_clear();
-                println!("\n{}", suggestion);
-                
-                if let Ok(answer) = editor.readline("Would you like to save this API design to the flow? (y/n) > ") {
-                    if answer.trim().eq_ignore_ascii_case("y") {
-                        self.save_story(&suggestion).await?;
-                        
-                        if let Ok(mock_answer) = editor.readline("Would you like to start the mock server? (y/n) > ") {
-                            if mock_answer.trim().eq_ignore_ascii_case("y") {
-                                println!("Starting mock server...");
-                                // Start mock server using flow manager
-                                let collections_dir = dirs::home_dir()
-                                    .ok_or("Could not find home directory")?
-                                    .join(".nuts")
-                                    .join("flows");
-                                let config = Config::load()?;
-                                let manager = CollectionManager::new(collections_dir, config);
-                                manager.start_mock_server(&self.flow, 3000).await?;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        println!("\n👋 Exiting story mode");
-        Ok(())
-    }
 
     fn show_thinking_spinner(&self) -> ProgressBar {
         let spinner = ProgressBar::new_spinner()
