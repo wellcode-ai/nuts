@@ -1,6 +1,6 @@
 # Nuts
 
-Best curl ever
+Nuts is back
 
 ### From Releases
 
