@@ -1,7 +1,6 @@
 # Nuts
 
-CURL CURL CURL
-
+Best curl ever
 
 ### From Releases
 
