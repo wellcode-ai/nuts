@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NUTS - Network Universal Testing Suite",
-  description: "A cyberpunk CLI tool for API testing, performance analysis, and security scanning. Built for the modern developer.",
-  keywords: ["API testing", "CLI tool", "performance testing", "security scanning", "Rust", "cyberpunk"],
+  title: "NUTS - API Testing, Performance & Security CLI Tool",
+  description: "Fast CLI tool for API testing, performance analysis, and security scanning. Built with Rust for modern developers.",
+  keywords: ["API testing", "CLI tool", "performance testing", "security scanning", "Rust", "command line"],
   authors: [{ name: "WellCode AI" }],
   openGraph: {
-    title: "NUTS - Network Universal Testing Suite",
-    description: "A cyberpunk CLI tool for API testing, performance analysis, and security scanning.",
+    title: "NUTS - API Testing, Performance & Security CLI Tool",
+    description: "Fast CLI tool for API testing, performance analysis, and security scanning.",
     type: "website",
   },
 };
@@ -20,6 +20,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+      </head>
       <body className="antialiased">
         {children}
       </body>

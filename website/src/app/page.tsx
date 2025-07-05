@@ -15,9 +15,9 @@ export default function Home() {
           NUTS
         </h1>
         
-        {/* Subtitle */}
+        {/* Clear subtitle */}
         <p className="subtitle">
-          Network Universal Testing Suite
+          API Testing, Performance & Security CLI Tool
         </p>
       </div>
 

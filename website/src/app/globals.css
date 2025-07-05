@@ -222,6 +222,17 @@ body {
   }
 }
 
+/* Logo styling */
+.logo-container img {
+  filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.5));
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+.logo-container img:hover {
+  transform: scale(1.1) rotate(5deg);
+  filter: drop-shadow(0 0 30px rgba(255, 255, 255, 0.8));
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .mini-terminal {
@@ -235,5 +246,10 @@ body {
   
   .nuts-logo {
     font-size: clamp(3rem, 12vw, 8rem);
+  }
+  
+  .logo-container img {
+    width: 96px;
+    height: 96px;
   }
 }
