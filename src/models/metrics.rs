@@ -9,6 +9,19 @@ pub struct RequestMetric {
     pub timestamp: SystemTime,
 }
 
+#[derive(Debug)]
+pub struct MetricsSummary {
+    pub avg_latency: Duration,
+    pub p95_latency: Duration,
+    pub p99_latency: Duration,
+    pub median_latency: Duration,
+    pub std_dev_latency: f64,
+    pub total_requests: usize,
+    pub error_rate: f64,
+    pub response_time_ranges: HashMap<String, usize>,
+    pub requests_per_second: Vec<(SystemTime, usize)>,
+    pub peak_rps: usize,
+}
 
 pub struct Metrics {
     latencies: Mutex<Vec<Duration>>,

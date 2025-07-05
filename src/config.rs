@@ -36,6 +36,10 @@ impl Config {
         }
     }
 
+    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
+        Self::load_from_file()
+    }
+
     pub fn merge(mut self, other: Config) -> Self {
         if self.anthropic_api_key.is_none() {
             self.anthropic_api_key = other.anthropic_api_key;

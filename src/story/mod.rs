@@ -19,6 +19,52 @@ pub struct StoryMode {
     api_key: String,
 }
 
+impl StoryMode {
+    pub fn new(flow: String, api_key: String) -> Self {
+        Self { flow, api_key }
+    }
+
+    pub async fn start(&self, editor: &mut rustyline::Editor<crate::completer::NutsCompleter, rustyline::history::DefaultHistory>) -> Result<(), Box<dyn std::error::Error>> {
+        println!("\n🎬 {}", style("Story Mode").cyan().bold());
+        println!("AI-guided API workflow for flow: {}", style(&self.flow).yellow());
+        println!("Type 'exit' to quit story mode\n");
+
+        loop {
+            let goal = editor.readline("🎯 What would you like to achieve? ");
+            match goal {
+                Ok(line) => {
+                    if line.trim().eq_ignore_ascii_case("exit") {
+                        break;
+                    }
+
+                    let spinner = self.show_thinking_spinner();
+                    
+                    if let Some(suggestion) = self.get_suggestion(&line).await {
+                        spinner.finish_with_message("Got it! 🚀");
+                        
+                        println!("\n📝 {}", style("Suggested workflow:").blue());
+                        println!("{}", suggestion);
+                        
+                        let execute = editor.readline("\n🚀 Execute this workflow? (y/n): ");
+                        if let Ok(response) = execute {
+                            if response.trim().eq_ignore_ascii_case("y") {
+                                println!("\n🏃 Executing workflow...");
+                                if let Err(e) = self.execute_flow(&suggestion).await {
+                                    println!("❌ Error executing workflow: {}", e);
+                                }
+                            }
+                        }
+                    } else {
+                        spinner.finish_with_message("Failed to get suggestion");
+                        println!("❌ Unable to get AI suggestion. Check your API key.");
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
+        Ok(())
+    }
 
     fn show_thinking_spinner(&self) -> ProgressBar {
         let spinner = ProgressBar::new_spinner()

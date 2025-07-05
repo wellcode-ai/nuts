@@ -26,6 +26,15 @@ pub enum ShellError {
     IoError(std::io::Error),
 }
 
+impl std::fmt::Display for ShellError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShellError::ApiError(msg) => write!(f, "API Error: {}", msg),
+            ShellError::ConfigError(msg) => write!(f, "Config Error: {}", msg),
+            ShellError::IoError(err) => write!(f, "IO Error: {}", err),
+        }
+    }
+}
 
 impl std::error::Error for ShellError {}
 
