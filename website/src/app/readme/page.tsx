@@ -40,7 +40,7 @@ nuts
             </div>
             <div className="text-center mt-6">
               <p className="text-flash-orange text-xl font-bold">
-                That's it! You're now using the most powerful API testing tool ever built. 🚀
+                That&apos;s it! You&apos;re now using the most powerful API testing tool ever built. 🚀
               </p>
             </div>
           </section>
