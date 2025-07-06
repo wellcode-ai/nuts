@@ -111,19 +111,25 @@ impl NutsShell {
 
     fn get_welcome_message(&self) -> String {
         let ascii_art = r#"
-    ███╗   ██╗██╗   ██╗██████████████╗
-    ████  ██║█║   ██║╚══██╔══╝██╔════╝
-    ██╔██╗ ██║██║   ██║   █║   ╚════██║
-    ██║╚██╗██║██║   ██║   ██║   ╚═════██║
-    ██║ ╚████║╚█████╔╝   ██║   ███████║
-    ╚═╝  ╚═══╝ ╚═════╝    ╚═╝   ╚══════╝
+    ███╗   ██╗ ██╗   ██╗ ████████╗ ███████╗
+    ████╗  ██║ ██║   ██║ ╚══██╔══╝ ██╔════╝ 
+    ██╔██╗ ██║ ██║   ██║    ██║    ███████╗
+    ██║╚██╗██║ ██║   ██║    ██║    ╚════██║
+    ██║ ╚████║ ╚██████╔╝    ██║    ███████║
+    ╚═╝  ╚═══╝  ╚═════╝     ╚═╝    ╚══════╝
+                                           
+    ╔═══════════════════════════════════════════════════════╗
+    ║            🤖 AI-POWERED CURL KILLER 🚀              ║
+    ║        The Revolutionary API Testing Revolution       ║
+    ╚═══════════════════════════════════════════════════════╝
     "#;
 
         format!(
-            "{}\n{}\n{}\n",
-            style(ascii_art).cyan(),
-            style(" Network Universal Testing Suite v0.1.0").magenta(),
-            style("Type 'help' to see available commands").green()
+            "{}\n{}\n{}\n{}\n",
+            style(ascii_art).cyan().bold(),
+            style("🥜 NUTS v0.1.0 - Talk to APIs Like a Human!").magenta().bold(),
+            style("💡 Just say: nuts ask \"Create 5 test users\" and watch the magic!").yellow(),
+            style("🎯 Type 'help' to see all AI superpowers").green()
         )
     }
 
@@ -148,6 +154,21 @@ impl NutsShell {
         println!("  {} - AI-enhanced performance tests", style("perf <METHOD> <URL> [OPTIONS]").green());
         println!("  {} - AI-powered security scanning", style("security <URL> [OPTIONS]").green());
 
+        // Advanced Call Options (CURL-like)
+        println!("\n{}", style("🔧 Advanced Call Options (CURL Killer!)").blue());
+        println!("  {} - Add custom headers", style("-H \"Content-Type: application/json\"").green());
+        println!("  {} - Basic authentication", style("-u username:password").green());
+        println!("  {} - Bearer token auth", style("--bearer <token>").green());
+        println!("  {} - Send data/body", style("-d '{\"name\": \"test\"}'").green());
+        println!("  {} - Form data upload", style("-F \"file=@data.txt\"").green());
+        println!("  {} - Verbose debug output", style("-v").green());
+        println!("  {} - Include response headers", style("-i").green());
+        println!("  {} - Save to file", style("-o response.json").green());
+        println!("  {} - Follow redirects", style("-L").green());
+        println!("  {} - Set timeout", style("--timeout 30").green());
+        println!("  {} - Auto retry requests", style("--retry 3").green());
+        println!("  {} - Skip SSL verification", style("-k").green());
+
 
         // Configuration
         println!("\n{}", style("⚙️  Configuration").yellow());
@@ -157,10 +178,12 @@ impl NutsShell {
         // Revolutionary Examples  
         println!("\n{}", style("🚀 Revolutionary Examples").blue().bold());
         println!("• {}", style("ask \"Create a POST request with user data\"").cyan());
-        println!("• {}", style("ask \"Test if my API handles 404 errors properly\"").cyan());
+        println!("• {}", style("call -X POST -H \"Content-Type: application/json\" -d '{\"name\":\"test\"}' https://api.example.com/users").cyan());
+        println!("• {}", style("call -v -L --bearer abc123 GET https://api.secure.com/data").cyan());
         println!("• {}", style("generate users 50").cyan());
         println!("• {}", style("monitor https://api.myapp.com --smart").cyan());
         println!("• {}", style("test \"Verify pagination works correctly\"").cyan());
+        println!("• {}", style("call --retry 3 --timeout 10 POST https://api.unreliable.com").cyan());
         println!("• {}", style("discover https://api.github.com").cyan());
         println!("• {}", style("fix https://api.broken.com").cyan());
 
@@ -388,47 +411,33 @@ impl NutsShell {
             }
             Some("call") => {
                 if parts.len() > 1 {
-                    let (method, url, body) = match parts[1].to_uppercase().as_str() {
-                        "POST" | "PUT" | "PATCH" => {
-                            if parts.len() < 4 {
-                                println!("❌ Usage: call {} URL JSON_BODY", parts[1].to_uppercase());
-                                return Ok(());
-                            }
-                            (parts[1].to_uppercase(), parts[2].clone(), parts.get(3).cloned())
-                        },
-                        "DELETE" => {
-                            if parts.len() < 3 {
-                                println!("❌ Usage: call DELETE URL");
-                                return Ok(());
-                            }
-                            ("DELETE".to_string(), parts[2].clone(), None)
-                        },
-                        "GET" | "HEAD" | "OPTIONS" => {
-                            if parts.len() < 3 {
-                                ("GET".to_string(), parts[1].clone(), None)
-                            } else {
-                                (parts[1].to_uppercase(), parts[2].clone(), None)
-                            }
-                        },
-                        _ => {
-                            // If no method specified, assume GET
-                            ("GET".to_string(), parts[1].clone(), None)
+                    // Use the new enhanced call command
+                    let call_command = CallCommand::new();
+                    let args: Vec<&str> = parts.iter().map(|s| s.as_str()).collect();
+                    
+                    match call_command.execute(&args).await {
+                        Ok(_) => {
+                            // For now, we don't store response for advanced calls
+                            // TODO: Enhance this to work with the new CallOptions system
                         }
-                    };
-                    
-                    // Store the request before executing
-                    self.store_last_request(method.clone(), url.clone(), body.clone());
-                    
-                    // Execute call and store response
-                    let response = CallCommand::new().execute_with_response(&parts.iter().map(|s| s.as_str()).collect::<Vec<&str>>()).await?;
-                    self.last_response = Some(response);
-                    
+                        Err(e) => println!("❌ Call failed: {}", e),
+                    }
                 } else {
-                    println!("❌ Usage: call [METHOD] URL [JSON_BODY]");
-                    println!("Supported methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS");
+                    println!("❌ Usage: call [OPTIONS] [METHOD] URL [BODY]");
+                    println!("🔧 Advanced Options:");
+                    println!("  -H \"Header: Value\"    Add custom headers");
+                    println!("  -u username:password  Basic authentication");
+                    println!("  --bearer <token>      Bearer token auth");
+                    println!("  -d 'data'             Send data/body");
+                    println!("  -v                    Verbose output");
+                    println!("  -i                    Include headers");
+                    println!("  -L                    Follow redirects");
+                    println!("  --timeout <sec>       Request timeout");
+                    println!("  --retry <num>         Retry failed requests");
                     println!("Examples:");
                     println!("  call GET https://api.example.com/users");
-                    println!("  call POST https://api.example.com/users {{'name': 'John'}}");
+                    println!("  call -v -H \"Authorization: Bearer token\" POST https://api.example.com/users");
+                    println!("  call -d '{{\"name\": \"John\"}}' https://api.example.com/users");
                 }
             }
             Some("help") => self.show_help(),

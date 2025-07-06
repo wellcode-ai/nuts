@@ -1,9 +1,53 @@
 use console::style;
-use reqwest::{header, Client};
+use reqwest::{header, Client, Method};
 use serde_json::Value;
 use std::error::Error;
+use std::time::{Duration, Instant};
+use std::collections::HashMap;
+use std::fs;
 use crate::models::analysis::{ApiAnalysis, CacheAnalysis};
 use crate::commands::CommandResult;
+
+#[derive(Debug)]
+pub struct CallOptions {
+    pub method: String,
+    pub url: String,
+    pub headers: HashMap<String, String>,
+    pub body: Option<String>,
+    pub follow_redirects: bool,
+    pub timeout: Option<Duration>,
+    pub verbose: bool,
+    pub include_headers: bool,
+    pub output_file: Option<String>,
+    pub user_agent: Option<String>,
+    pub auth: Option<(String, String)>,
+    pub bearer_token: Option<String>,
+    pub insecure: bool,
+    pub max_retries: u32,
+    pub form_data: HashMap<String, String>,
+}
+
+impl Default for CallOptions {
+    fn default() -> Self {
+        Self {
+            method: "GET".to_string(),
+            url: String::new(),
+            headers: HashMap::new(),
+            body: None,
+            follow_redirects: false,
+            timeout: Some(Duration::from_secs(30)),
+            verbose: false,
+            include_headers: false,
+            output_file: None,
+            user_agent: Some("NUTS/0.1.0 (AI-Powered CURL Killer)".to_string()),
+            auth: None,
+            bearer_token: None,
+            insecure: false,
+            max_retries: 0,
+            form_data: HashMap::new(),
+        }
+    }
+}
 
 pub struct CallCommand {
     client: Client,
@@ -12,30 +56,359 @@ pub struct CallCommand {
 impl CallCommand {
     pub fn new() -> Self {
         CallCommand {
-            client: Client::new(),
+            client: Client::builder()
+                .user_agent("NUTS/0.1.0 (AI-Powered CURL Killer)")
+                .build()
+                .unwrap(),
         }
     }
 
     pub async fn execute(&self, args: &[&str]) -> CommandResult {
-        println!("🚀 Executing request...");
-        
-        let (method, url, body) = self.parse_args(args)?;
-        
-        // Convert url to proper URL type
-        let url = if !url.starts_with("http") {
-            format!("http://{}", url)
-        } else {
-            url.to_string()
-        };
-        
-        let response = self.client.request(method.parse()?, &url)
-            .body(body.map(|b| b.to_string()).unwrap_or_default())
-            .send()
-            .await?;
+        let options = self.parse_advanced_args(args)?;
+        self.execute_with_options(options).await
+    }
+
+    pub async fn execute_with_options(&self, options: CallOptions) -> CommandResult {
+        if options.verbose {
+            println!("🔍 Verbose mode enabled");
+            self.print_request_info(&options);
+        }
+
+        let start_time = Instant::now();
+        let mut attempts = 0;
+        let max_attempts = options.max_retries + 1;
+
+        loop {
+            attempts += 1;
             
-        self.print_response(response).await?;
-        
+            if options.verbose && attempts > 1 {
+                println!("🔄 Retry attempt {} of {}", attempts, max_attempts);
+            }
+
+            match self.make_request(&options).await {
+                Ok(response) => {
+                    let elapsed = start_time.elapsed();
+                    self.handle_response(response, &options, elapsed).await?;
+                    break;
+                }
+                Err(e) if attempts < max_attempts => {
+                    if options.verbose {
+                        println!("❌ Attempt {} failed: {}", attempts, e);
+                        println!("⏳ Waiting before retry...");
+                    }
+                    tokio::time::sleep(Duration::from_millis(1000 * attempts as u64)).await;
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
         Ok(())
+    }
+
+    fn print_request_info(&self, options: &CallOptions) {
+        println!("🌐 {} {}", style(&options.method).cyan(), style(&options.url).cyan());
+        
+        if !options.headers.is_empty() {
+            println!("📋 Request Headers:");
+            for (key, value) in &options.headers {
+                println!("  {}: {}", style(key).dim(), value);
+            }
+        }
+
+        if let Some(body) = &options.body {
+            println!("📝 Request Body:");
+            println!("{}", style(body).blue());
+        }
+
+        if !options.form_data.is_empty() {
+            println!("📊 Form Data:");
+            for (key, value) in &options.form_data {
+                println!("  {}: {}", style(key).dim(), value);
+            }
+        }
+    }
+
+    async fn make_request(&self, options: &CallOptions) -> Result<reqwest::Response, Box<dyn Error>> {
+        let mut client_builder = Client::builder();
+
+        // Configure client based on options
+        if let Some(timeout) = options.timeout {
+            client_builder = client_builder.timeout(timeout);
+        }
+
+        if options.insecure {
+            client_builder = client_builder.danger_accept_invalid_certs(true);
+        }
+
+        if !options.follow_redirects {
+            client_builder = client_builder.redirect(reqwest::redirect::Policy::none());
+        }
+
+        let client = client_builder.build()?;
+        let method: Method = options.method.parse()?;
+        let mut request = client.request(method, &options.url);
+
+        // Add headers
+        for (key, value) in &options.headers {
+            request = request.header(key, value);
+        }
+
+        // Add user agent
+        if let Some(ua) = &options.user_agent {
+            request = request.header("User-Agent", ua);
+        }
+
+        // Add authentication
+        if let Some((username, password)) = &options.auth {
+            request = request.basic_auth(username, Some(password));
+        }
+
+        if let Some(token) = &options.bearer_token {
+            request = request.bearer_auth(token);
+        }
+
+        // Add body or form data
+        if !options.form_data.is_empty() {
+            request = request.form(&options.form_data);
+        } else if let Some(body) = &options.body {
+            // Try to parse as JSON first
+            if let Ok(json_value) = serde_json::from_str::<Value>(body) {
+                request = request.json(&json_value);
+            } else {
+                request = request.body(body.clone());
+            }
+        }
+
+        Ok(request.send().await?)
+    }
+
+    async fn handle_response(&self, response: reqwest::Response, options: &CallOptions, elapsed: Duration) -> CommandResult {
+        let status = response.status();
+        let headers = response.headers().clone();
+        
+        println!("📡 Status: {} ({}ms)", 
+            style(status).yellow(), 
+            style(elapsed.as_millis()).dim()
+        );
+
+        if options.include_headers || options.verbose {
+            println!("\n📋 Response Headers:");
+            for (key, value) in &headers {
+                println!("  {}: {}", style(key).dim(), value.to_str().unwrap_or(""));
+            }
+        }
+
+        // Get response body
+        let text = response.text().await?;
+
+        // Save to file if specified
+        if let Some(output_file) = &options.output_file {
+            fs::write(output_file, &text)?;
+            println!("💾 Response saved to: {}", style(output_file).green());
+        } else {
+            // Print response
+            println!("\n📦 Response:");
+            if let Ok(json) = serde_json::from_str::<Value>(&text) {
+                println!("{}", style(serde_json::to_string_pretty(&json)?).green());
+            } else {
+                println!("{}", style(text.trim()).green());
+            }
+        }
+
+        // Performance metrics
+        if options.verbose {
+            println!("\n⚡ Performance:");
+            println!("  Response time: {}ms", elapsed.as_millis());
+            println!("  Response size: {} bytes", text.len());
+        }
+
+        Ok(())
+    }
+
+    fn parse_advanced_args(&self, args: &[&str]) -> Result<CallOptions, Box<dyn Error>> {
+        if args.len() < 2 {
+            return Err("Usage: call [OPTIONS] [METHOD] URL [BODY]".into());
+        }
+
+        let mut options = CallOptions::default();
+        let mut i = 1; // Skip "call"
+        let mut url_found = false;
+
+        while i < args.len() {
+            match args[i] {
+                // Headers
+                "-H" | "--header" => {
+                    if i + 1 >= args.len() {
+                        return Err("Header value required after -H/--header".into());
+                    }
+                    let header = args[i + 1];
+                    if let Some((key, value)) = header.split_once(':') {
+                        options.headers.insert(key.trim().to_string(), value.trim().to_string());
+                    } else {
+                        return Err("Header must be in format 'Key: Value'".into());
+                    }
+                    i += 2;
+                }
+                
+                // Authentication
+                "-u" | "--user" => {
+                    if i + 1 >= args.len() {
+                        return Err("Username:password required after -u/--user".into());
+                    }
+                    let auth_str = args[i + 1];
+                    if let Some((username, password)) = auth_str.split_once(':') {
+                        options.auth = Some((username.to_string(), password.to_string()));
+                    } else {
+                        return Err("Auth must be in format 'username:password'".into());
+                    }
+                    i += 2;
+                }
+
+                "--bearer" => {
+                    if i + 1 >= args.len() {
+                        return Err("Bearer token required after --bearer".into());
+                    }
+                    options.bearer_token = Some(args[i + 1].to_string());
+                    i += 2;
+                }
+
+                // Request options
+                "-X" | "--request" => {
+                    if i + 1 >= args.len() {
+                        return Err("HTTP method required after -X/--request".into());
+                    }
+                    options.method = args[i + 1].to_uppercase();
+                    i += 2;
+                }
+
+                "-d" | "--data" => {
+                    if i + 1 >= args.len() {
+                        return Err("Data required after -d/--data".into());
+                    }
+                    options.body = Some(args[i + 1].to_string());
+                    if options.method == "GET" {
+                        options.method = "POST".to_string();
+                    }
+                    i += 2;
+                }
+
+                "-F" | "--form" => {
+                    if i + 1 >= args.len() {
+                        return Err("Form data required after -F/--form".into());
+                    }
+                    let form_data = args[i + 1];
+                    if let Some((key, value)) = form_data.split_once('=') {
+                        options.form_data.insert(key.to_string(), value.to_string());
+                    } else {
+                        return Err("Form data must be in format 'key=value'".into());
+                    }
+                    if options.method == "GET" {
+                        options.method = "POST".to_string();
+                    }
+                    i += 2;
+                }
+
+                // Output options
+                "-v" | "--verbose" => {
+                    options.verbose = true;
+                    i += 1;
+                }
+
+                "-i" | "--include" => {
+                    options.include_headers = true;
+                    i += 1;
+                }
+
+                "-o" | "--output" => {
+                    if i + 1 >= args.len() {
+                        return Err("Output file required after -o/--output".into());
+                    }
+                    options.output_file = Some(args[i + 1].to_string());
+                    i += 2;
+                }
+
+                // Network options
+                "-L" | "--location" => {
+                    options.follow_redirects = true;
+                    i += 1;
+                }
+
+                "--timeout" => {
+                    if i + 1 >= args.len() {
+                        return Err("Timeout value required after --timeout".into());
+                    }
+                    let timeout_secs: u64 = args[i + 1].parse()
+                        .map_err(|_| "Invalid timeout value")?;
+                    options.timeout = Some(Duration::from_secs(timeout_secs));
+                    i += 2;
+                }
+
+                "--retry" => {
+                    if i + 1 >= args.len() {
+                        return Err("Retry count required after --retry".into());
+                    }
+                    options.max_retries = args[i + 1].parse()
+                        .map_err(|_| "Invalid retry count")?;
+                    i += 2;
+                }
+
+                "-A" | "--user-agent" => {
+                    if i + 1 >= args.len() {
+                        return Err("User agent required after -A/--user-agent".into());
+                    }
+                    options.user_agent = Some(args[i + 1].to_string());
+                    i += 2;
+                }
+
+                "-k" | "--insecure" => {
+                    options.insecure = true;
+                    i += 1;
+                }
+
+                // If it starts with -, it's an unknown option
+                arg if arg.starts_with('-') => {
+                    return Err(format!("Unknown option: {}", arg).into());
+                }
+
+                // HTTP methods
+                "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS" => {
+                    if url_found {
+                        // This is probably body data after URL
+                        options.body = Some(args[i..].join(" "));
+                        break;
+                    } else {
+                        options.method = args[i].to_uppercase();
+                        i += 1;
+                    }
+                }
+
+                // URL or body data
+                _ => {
+                    if !url_found {
+                        // First non-option argument is the URL
+                        let url_candidate = args[i];
+                        if url_candidate.starts_with("http") {
+                            options.url = url_candidate.to_string();
+                        } else {
+                            options.url = format!("https://{}", url_candidate);
+                        }
+                        url_found = true;
+                        i += 1;
+                    } else {
+                        // Everything else is body data
+                        options.body = Some(args[i..].join(" "));
+                        break;
+                    }
+                }
+            }
+        }
+
+        if options.url.is_empty() {
+            return Err("URL is required".into());
+        }
+
+        Ok(options)
     }
 
     async fn print_response(&self, response: reqwest::Response) -> CommandResult {

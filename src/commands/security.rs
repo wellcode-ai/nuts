@@ -141,7 +141,7 @@ impl SecurityCommand {
         // Combine all analyses for AI processing
         let analysis_prompt = if self.deep_scan {
             format!(
-                "Perform a deep security analysis of these API responses, including main endpoint and additional security checks.\n\n\
+                "You are the best security architect on the world and you will perform a deep security analysis of these API responses, including main endpoint and additional security checks.\n\n\
                 Main endpoint response:\n{}\n\n\
                 Additional endpoints and methods tested:\n{}\n\n\
                 Provide a comprehensive security analysis focusing on:\n\
@@ -155,7 +155,7 @@ impl SecurityCommand {
             )
         } else {
             format!(
-                "Analyze this API response for security issues. Consider OWASP top 10 and best practices.\n\n{}\n\
+                "You are the best security architect on the world and you will analyze this API response for security issues. Consider OWASP top 10 and best practices.\n\n{}\n\
                 Provide a security analysis focusing on:\n\
                 1. Response headers security\n\
                 2. Data exposure risks\n\
