@@ -16,19 +16,101 @@ export default function ReadmePage() {
         <div className="readme-content">
           
           <section className="mb-12">
-            <h2 className="section-title">🚀 Installation</h2>
+            <h2 className="section-title">⚡ 30-Second Start (Try It Now!)</h2>
             <div className="code-block">
-              <div className="code-header">Terminal</div>
+              <div className="code-header">Copy & Paste to Get Started</div>
               <pre className="code-content">
-{`# Install from GitHub
+{`# Install (choose one)
 cargo install --git https://github.com/wellcode-ai/nuts
+# OR download from releases: https://github.com/wellcode-ai/nuts/releases
 
-# Verify installation  
-nuts --version
+# Start the interactive shell
+nuts
 
-# Configure AI features
-nuts config api-key`}
+# Try these commands immediately (no setup needed!)
+> call GET https://jsonplaceholder.typicode.com/users
+> call POST https://httpbin.org/post '{"name": "Test"}'
+> perf GET https://httpbin.org/get --users 10
+
+# AI features (optional - requires API key)
+> config api-key  # Enter your Anthropic API key
+> ask "Create a user with realistic data"
+> monitor https://httpbin.org/get --smart`}
               </pre>
+            </div>
+            <div className="text-center mt-6">
+              <p className="text-flash-orange text-xl font-bold">
+                That's it! You're now using the most powerful API testing tool ever built. 🚀
+              </p>
+            </div>
+          </section>
+
+          <section className="mb-12">
+            <h2 className="section-title">🤔 What Makes NUTS Different?</h2>
+            
+            <div className="grid md:grid-cols-2 gap-8 mb-8">
+              <div className="cyberpunk-border p-6">
+                <h3 className="text-red-400 text-lg font-bold mb-4">❌ Traditional Tools</h3>
+                <div className="code-block">
+                  <pre className="code-content text-sm">
+{`# Complex curl commands
+curl -X POST https://api.example.com/users \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer token123" \\
+  -d '{"name":"John","email":"john@example.com"}'
+
+# Multiple tools needed
+curl + jq + ab + custom scripts...`}
+                  </pre>
+                </div>
+              </div>
+              
+              <div className="cyberpunk-border p-6">
+                <h3 className="text-flash-orange text-lg font-bold mb-4">✅ NUTS (AI-Powered)</h3>
+                <div className="code-block">
+                  <pre className="code-content text-sm">
+{`# Simple, powerful commands
+> call POST https://api.example.com/users '{"name":"John"}'
+> ask "Create a realistic user for testing"
+> perf GET https://api.example.com/users --users 100
+> monitor https://api.example.com --smart`}
+                  </pre>
+                </div>
+              </div>
+            </div>
+
+            <div className="cyberpunk-border p-6">
+              <h3 className="text-flash-orange text-lg font-bold mb-4">🎯 Why Developers Love NUTS</h3>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="flex items-start gap-3">
+                  <span className="text-flash-orange text-xl">🚀</span>
+                  <div>
+                    <h4 className="text-white font-bold">Zero Learning Curve</h4>
+                    <p className="text-gray-300">If you know curl, you know NUTS</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="text-flash-orange text-xl">🤖</span>
+                  <div>
+                    <h4 className="text-white font-bold">AI-Powered</h4>
+                    <p className="text-gray-300">Natural language commands, smart monitoring, auto-fix</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="text-flash-orange text-xl">⚡</span>
+                  <div>
+                    <h4 className="text-white font-bold">All-in-One</h4>
+                    <p className="text-gray-300">Testing, monitoring, security, performance in one tool</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="text-flash-orange text-xl">🎯</span>
+                  <div>
+                    <h4 className="text-white font-bold">Production-Ready</h4>
+                    <p className="text-gray-300">Built with Rust for reliability and speed</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -160,30 +242,6 @@ nuts fix https://api.example.com/broken           # Auto-fix issues`}
               </div>
             </div>
 
-            <div className="mb-8">
-              <h3 className="feature-title">🔄 Flow Management</h3>
-              <div className="code-block">
-                <div className="code-header">OpenAPI Collections & Workflows</div>
-                <pre className="code-content">
-{`# Create and manage API collections
-nuts flow new myapi                               # Create new flow
-nuts flow add myapi GET /users                    # Add endpoint
-nuts flow add myapi POST /users                   # Add another endpoint
-nuts flow run myapi /users                        # Execute endpoint
-nuts flow list                                    # List all flows
-nuts flow docs myapi                              # Generate documentation
-
-# Mock Server Generation
-nuts flow mock myapi                              # Start mock server
-nuts flow mock myapi 8080                         # Start on specific port
-nuts flow configure_mock_data myapi /users        # Configure mock data
-
-# AI-Guided Workflows
-nuts flow story myapi                             # Start AI-guided exploration
-nuts flow s myapi                                 # Shorthand for story mode`}
-                </pre>
-              </div>
-            </div>
 
             <div className="mb-8">
               <h3 className="feature-title">⚙️ Configuration & Shortcuts</h3>

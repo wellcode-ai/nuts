@@ -45,16 +45,61 @@ cargo install --path .
 cargo install --git https://github.com/wellcode-ai/nuts
 ```
 
-## 🎯 Quick Start
+## ⚡ 30-Second Start (Try It Now!)
 
-### 1. Configure AI Features (Optional)
 ```bash
+# Install (choose one)
+cargo install --git https://github.com/wellcode-ai/nuts
+# OR download from releases: https://github.com/wellcode-ai/nuts/releases
+
+# Start the interactive shell
 nuts
-> config api-key
-# Enter your Anthropic API key for AI features
+
+# Try these commands immediately (no setup needed!)
+> call GET https://jsonplaceholder.typicode.com/users
+> call POST https://httpbin.org/post '{"name": "Test"}'
+> perf GET https://httpbin.org/get --users 10
+
+# AI features (optional - requires API key)
+> config api-key  # Enter your Anthropic API key
+> ask "Create a user with realistic data"
+> monitor https://httpbin.org/get --smart
 ```
 
-### 2. Basic API Testing
+**That's it!** You're now using the most powerful API testing tool ever built. 🚀
+
+## 🤔 What Makes NUTS Different?
+
+**Instead of this (traditional tools):**
+```bash
+# Complex curl commands
+curl -X POST https://api.example.com/users \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer token123" \
+  -d '{"name":"John","email":"john@example.com","role":"admin"}'
+
+# Multiple tools needed
+curl + jq + ab + custom scripts...
+```
+
+**You get this (NUTS):**
+```bash
+# Simple, powerful commands
+> call POST https://api.example.com/users '{"name":"John"}'
+> ask "Create a realistic user for testing"
+> perf GET https://api.example.com/users --users 100
+> monitor https://api.example.com --smart
+```
+
+**Why developers love NUTS:**
+- 🚀 **Zero learning curve** - If you know curl, you know NUTS
+- 🤖 **AI-powered** - Natural language commands, smart monitoring, auto-fix
+- ⚡ **All-in-one** - Testing, monitoring, security, performance in one tool
+- 🎯 **Production-ready** - Built with Rust for reliability and speed
+
+## 🎯 Detailed Quick Start
+
+### 1. Basic API Testing (Works Immediately)
 ```bash
 # Simple GET request
 > call GET https://jsonplaceholder.typicode.com/users
@@ -66,21 +111,27 @@ nuts
 > call -H "Content-Type: application/json" --bearer "token123" GET https://api.example.com/users
 ```
 
-### 3. Natural Language Commands (AI Required)
-```bash
-# Let AI create the perfect request for you
-> ask "Create a POST request to register a new user with realistic data"
-> ask "Get all products from an e-commerce API"
-> ask "Delete user with ID 123"
-```
-
-### 4. Performance Testing
+### 2. Performance Testing (No Setup Required)
 ```bash
 # Basic load test
 > perf GET https://httpbin.org/get
 
 # Advanced load test
 > perf GET https://api.example.com/users --users 100 --duration 30s
+```
+
+### 3. Configure AI Features (Optional but Recommended)
+```bash
+> config api-key
+# Enter your Anthropic API key for AI features
+```
+
+### 4. Natural Language Commands (AI Required)
+```bash
+# Let AI create the perfect request for you
+> ask "Create a POST request to register a new user with realistic data"
+> ask "Get all products from an e-commerce API"
+> ask "Delete user with ID 123"
 ```
 
 ### 5. Security Scanning (AI Required)
