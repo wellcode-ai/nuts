@@ -71,14 +71,17 @@ nuts generate orders 10
               <div className="feature-card">
                 <h3 className="feature-title">📊 Smart Monitoring</h3>
                 <p className="feature-description">
-                  AI monitors your APIs and predicts issues before they happen.
+                  AI monitors your APIs and predicts issues before they happen. Health checks every 30 seconds, AI analysis every 3rd check.
                 </p>
                 <div className="code-block">
                   <pre className="code-content">
-{`# Smart monitoring with AI insights
+{`# Basic monitoring (30-second intervals)
+nuts monitor https://api.myapp.com
+
+# Smart monitoring with AI insights (every 90 seconds)
 nuts monitor https://api.myapp.com --smart
 
-# AI analyzes patterns and alerts you to issues`}
+# AI analyzes patterns, trends, and predictions`}
                   </pre>
                 </div>
               </div>
@@ -112,6 +115,92 @@ nuts fix https://api.broken.com
 # Get specific actionable recommendations`}
                   </pre>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="mb-12">
+            <h2 className="section-title">📚 Complete Command Reference</h2>
+            
+            <div className="mb-8">
+              <h3 className="feature-title">🔧 Core Commands</h3>
+              <div className="code-block">
+                <div className="code-header">Essential API Testing Commands</div>
+                <pre className="code-content">
+{`# Advanced HTTP Client (CURL killer)
+nuts call GET https://api.example.com/users
+nuts call POST https://api.example.com/users '{"name": "John"}'
+nuts call -H "Authorization: Bearer token" GET https://api.example.com/users
+
+# Natural Language Interface
+nuts ask "Create a user with realistic data"
+nuts ask "Get all products from the API"
+nuts ask "Delete user with ID 123"
+
+# Performance Testing
+nuts perf GET https://api.example.com/users --users 100 --duration 30s
+nuts perf POST https://api.example.com/users --users 50 '{"name": "Test"}'
+
+# Security Scanning
+nuts security https://api.example.com --deep
+nuts security https://api.example.com --auth "Bearer token" --save report.json
+
+# Health Monitoring
+nuts monitor https://api.example.com              # Basic (30s intervals)
+nuts monitor https://api.example.com --smart      # AI analysis (every 3rd check)
+
+# API Discovery & Testing
+nuts discover https://api.example.com             # Auto-discover endpoints
+nuts test "Check if user registration works"      # AI test generation
+nuts generate users 10                            # Generate test data
+nuts predict https://api.example.com              # AI health prediction
+nuts explain                                      # Explain last response
+nuts fix https://api.example.com/broken           # Auto-fix issues`}
+                </pre>
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h3 className="feature-title">🔄 Flow Management</h3>
+              <div className="code-block">
+                <div className="code-header">OpenAPI Collections & Workflows</div>
+                <pre className="code-content">
+{`# Create and manage API collections
+nuts flow new myapi                               # Create new flow
+nuts flow add myapi GET /users                    # Add endpoint
+nuts flow add myapi POST /users                   # Add another endpoint
+nuts flow run myapi /users                        # Execute endpoint
+nuts flow list                                    # List all flows
+nuts flow docs myapi                              # Generate documentation
+
+# Mock Server Generation
+nuts flow mock myapi                              # Start mock server
+nuts flow mock myapi 8080                         # Start on specific port
+nuts flow configure_mock_data myapi /users        # Configure mock data
+
+# AI-Guided Workflows
+nuts flow story myapi                             # Start AI-guided exploration
+nuts flow s myapi                                 # Shorthand for story mode`}
+                </pre>
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h3 className="feature-title">⚙️ Configuration & Shortcuts</h3>
+              <div className="code-block">
+                <div className="code-header">Setup & Aliases</div>
+                <pre className="code-content">
+{`# Configuration
+nuts config api-key                               # Set Anthropic API key
+nuts config show                                  # Show current config
+
+# Command Aliases (shortcuts)
+nuts c GET https://api.example.com                # 'c' = call
+nuts p GET https://api.example.com --users 10     # 'p' = perf
+nuts s myapi                                      # 's' = flow story
+nuts h                                            # 'h' = help
+nuts q                                            # 'q' = quit`}
+                </pre>
               </div>
             </div>
           </section>
