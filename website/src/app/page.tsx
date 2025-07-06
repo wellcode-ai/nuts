@@ -17,7 +17,7 @@ export default function Home() {
         
         {/* Clear subtitle */}
         <p className="subtitle">
-          API Testing, Performance & Security CLI Tool
+          AI-Powered CURL Killer & API Testing Revolution
         </p>
       </div>
 
@@ -40,15 +40,33 @@ export default function Home() {
           
           <div className="terminal-line">
             <span className="terminal-prompt">$</span>
-            <span className="terminal-command">nuts --version</span>
-            <span className="terminal-comment"># Check installation</span>
+            <span className="terminal-command">nuts ask &quot;Create 5 test users with realistic data&quot;</span>
+            <span className="terminal-comment"># AI CURL killer</span>
           </div>
           
           <div className="terminal-line">
             <span className="terminal-prompt">$</span>
-            <span className="terminal-command">nuts help</span>
-            <span className="terminal-comment"># Get started</span>
+            <span className="terminal-command">nuts generate products 50</span>
+            <span className="terminal-comment"># AI test data</span>
           </div>
+          
+          <div className="terminal-line">
+            <span className="terminal-prompt">$</span>
+            <span className="terminal-command">nuts monitor https://api.myapp.com --smart</span>
+            <span className="terminal-comment"># Smart monitoring</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <div className="absolute bottom-16 text-center w-full">
+        <div className="flex justify-center gap-4 mb-4">
+          <a href="/readme" className="cyberpunk-button">
+            📖 README
+          </a>
+          <a href="https://github.com/wellcode-ai/nuts" className="cyberpunk-button">
+            🚀 GitHub
+          </a>
         </div>
       </div>
 

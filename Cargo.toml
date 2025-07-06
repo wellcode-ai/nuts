@@ -36,6 +36,7 @@ tracing-subscriber = "0.3"
 hyper = { version = "1.0", features = ["full"] }
 tower = "0.4"
 axum-server = "0.6"
+chrono = { version = "0.4", features = ["serde"] }
 [[bin]]
 name = "nuts"
 path = "src/main.rs"

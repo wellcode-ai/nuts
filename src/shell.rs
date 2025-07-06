@@ -5,7 +5,14 @@ use rustyline::history::DefaultHistory;
 use crate::commands::call::CallCommand;
 use crate::commands::security::SecurityCommand;
 use crate::commands::perf::PerfCommand;
-use crate::flows::manager::CollectionManager;
+use crate::commands::test::TestCommand;
+use crate::commands::discover::DiscoverCommand;
+use crate::commands::predict::PredictCommand;
+use crate::commands::ask::AskCommand;
+use crate::commands::generate::GenerateCommand;
+use crate::commands::monitor::MonitorCommand;
+use crate::commands::explain::ExplainCommand;
+use crate::commands::fix::FixCommand;
 use crate::config::Config;
 use std::path::PathBuf;
 use std::fs;
@@ -17,7 +24,6 @@ use anthropic::types::MessagesRequestBuilder;
 use anthropic::types::Role;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Duration;
-use crate::story::StoryMode;
 
 #[derive(Debug)]
 pub enum ShellError {
@@ -45,7 +51,6 @@ pub struct NutsShell {
     suggestions: Vec<String>,
     last_request: Option<(String, String, Option<String>)>,
     last_response: Option<String>,
-    collection_manager: CollectionManager,
 }
 
 impl NutsShell {
@@ -64,13 +69,6 @@ impl NutsShell {
     }
 
     pub fn new() -> Self {
-        let collections_dir = dirs::home_dir()
-            .map(|h| h.join(".nuts").join("flows"))
-            .expect("Could not determine home directory");
-            
-        std::fs::create_dir_all(&collections_dir)
-            .expect("Failed to create flows directory");
-
         // Load config first
         let config = Config::load().unwrap_or_default();
 
@@ -81,15 +79,11 @@ impl NutsShell {
 
         Self {
             editor,
-            config: config.clone(),
+            config,
             history: Vec::new(),
             suggestions: Vec::new(),
             last_request: None,
             last_response: None,
-            collection_manager: CollectionManager::new(
-                collections_dir,
-                config
-            ),
         }
     }
 
@@ -134,45 +128,50 @@ impl NutsShell {
     }
 
     fn show_help(&self) {
-        println!("\n{}", style("🥜 NUTS - Network Universal Testing Suite").cyan().bold());
-        println!("{}\n", style("Version 0.1.0").dim());
+        println!("\n{}", style("🥜 NUTS - API Testing, Performance & Security CLI Tool").cyan().bold());
+        println!("{}\n", style("Version 0.1.0 - The Future of API Testing").dim());
 
-        // Core Commands
-        println!("{}", style("🌐 API Testing").yellow());
-        println!("  {} - Test an API endpoint", style("call <METHOD> <URL> [BODY]").green());
-        println!("  {} - Run performance tests", style("perf <METHOD> <URL> [OPTIONS]").green());
-        println!("  {} - Scan for security issues", style("security <URL> [OPTIONS]").green());
+        // Revolutionary AI Features
+        println!("{}", style("🚀 AI SUPERPOWERS (CURL Killer!)").magenta().bold());
+        println!("  {} - AI-powered CURL alternative", style("ask \"Create 5 test users with realistic data\"").green());
+        println!("  {} - Generate realistic test data", style("generate users 10").green());
+        println!("  {} - Smart API monitoring", style("monitor <URL> --smart").green());
+        println!("  {} - AI explains API responses", style("explain").green());
+        println!("  {} - Auto-diagnose and fix APIs", style("fix <URL>").green());
 
-        // Flow Management
-        println!("\n{}", style("📚 sFlow").yellow());
-        println!("  {} - Create new flow", style("flow new <name>").green());
-        println!("  {} - Add endpoint to flow", style("flow add <name> <METHOD> <path>").green());
-        println!("  {} - Run flow endpoint", style("flow run <name> <endpoint>").green());
-        println!("  {} - Generate OpenAPI docs", style("flow docs <name> [format]").green());
-        println!("  {} - Save last request", style("save <flow> <name>").green());
-        println!("  {} - List flows", style("flow list").green());
+        // Smart API Testing
+        println!("\n{}", style("⚡ Smart API Testing").yellow());
+        println!("  {} - Test with natural language", style("test \"Check if user registration works\"").green());
+        println!("  {} - Smart endpoint testing", style("call <METHOD> <URL> [BODY]").green());
+        println!("  {} - Auto-discover API endpoints", style("discover <BASE_URL>").green());
+        println!("  {} - Predict API health issues", style("predict <BASE_URL>").green());
+        println!("  {} - AI-enhanced performance tests", style("perf <METHOD> <URL> [OPTIONS]").green());
+        println!("  {} - AI-powered security scanning", style("security <URL> [OPTIONS]").green());
 
-        // Mock Server
-        println!("\n{}", style("🎭 Mock Server").yellow());
-        println!("  {} - Start mock server", style("flow mock <name> [port]").green());
-        println!("  {} - Configure mock data", style("flow configure_mock_data <name> <endpoint>").green());
-
-        // Add Story Mode section after Mock Server
-        println!("\n{}", style("🎬 Story Mode").yellow());
-        println!("  {} - Start AI-guided API workflow", style("flow story <name>").green());
-        println!("  {} - Quick story mode alias", style("flow s <name>").green());
 
         // Configuration
         println!("\n{}", style("⚙️  Configuration").yellow());
         println!("  {} - Configure API key", style("config api-key").green());
         println!("  {} - Show current config", style("config show").green());
 
+        // Revolutionary Examples  
+        println!("\n{}", style("🚀 Revolutionary Examples").blue().bold());
+        println!("• {}", style("ask \"Create a POST request with user data\"").cyan());
+        println!("• {}", style("ask \"Test if my API handles 404 errors properly\"").cyan());
+        println!("• {}", style("generate users 50").cyan());
+        println!("• {}", style("monitor https://api.myapp.com --smart").cyan());
+        println!("• {}", style("test \"Verify pagination works correctly\"").cyan());
+        println!("• {}", style("discover https://api.github.com").cyan());
+        println!("• {}", style("fix https://api.broken.com").cyan());
+
         // Pro Tips
-        println!("\n{}", style("💡 Tips").blue());
-        println!("• Use TAB for command completion");
-        println!("• Commands are case-insensitive");
-        println!("• Save frequently used calls to flows");
-        println!("• Press Ctrl+C to cancel any operation");
+        println!("\n{}", style("💡 Pro Tips").blue());
+        println!("• Talk to NUTS like a human - it understands natural language!");
+        println!("• Use 'ask' instead of memorizing curl commands");
+        println!("• Generate unlimited realistic test data with AI");
+        println!("• Let AI explain confusing API responses");
+        println!("• Monitor APIs smartly to prevent issues");
+        println!("• NUTS gets smarter the more you use it!");
     }
 
     pub async fn process_command(&mut self, cmd: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -182,17 +181,184 @@ impl NutsShell {
             .collect();
 
         match parts.first().map(|s| s.as_str()) {
+            Some("test") => {
+                if parts.len() < 2 {
+                    println!("❌ Usage: test \"natural language description\" [base_url]");
+                    println!("Examples:");
+                    println!("  test \"Check if user registration works with valid email\"");
+                    println!("  test \"Verify pagination works correctly\" https://api.example.com");
+                    println!("  test \"Ensure rate limiting kicks in after 100 requests\"");
+                    return Ok(());
+                }
+
+                // Extract the test description (remove quotes if present)
+                let description = parts[1..].join(" ").trim_matches('"').to_string();
+                
+                // Check if last argument looks like a URL
+                let base_url = if parts.len() > 2 {
+                    let last_part = parts.last().unwrap();
+                    if last_part.starts_with("http") {
+                        Some(last_part.as_str())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let test_command = TestCommand::new(self.config.clone());
+                test_command.execute_natural_language(&description, base_url).await?;
+            }
+            Some("discover") => {
+                if parts.len() < 2 {
+                    println!("❌ Usage: discover <BASE_URL>");
+                    println!("Examples:");
+                    println!("  discover https://api.github.com");
+                    println!("  discover https://jsonplaceholder.typicode.com");
+                    println!("  discover https://api.myapp.com");
+                    return Ok(());
+                }
+
+                let base_url = &parts[1];
+                let discover_command = DiscoverCommand::new(self.config.clone());
+                
+                match discover_command.discover(base_url).await {
+                    Ok(api_map) => {
+                        println!("\n✅ Discovery complete! Found {} endpoints", api_map.endpoints.len());
+                        
+                        // Ask if user wants to generate a flow
+                        if !api_map.endpoints.is_empty() {
+                            println!("\n💡 Generate a flow from discovered endpoints? (y/n)");
+                            if let Ok(response) = self.editor.readline("🚀 ") {
+                                if response.trim().eq_ignore_ascii_case("y") {
+                                    let flow_name = format!("discovered-{}", 
+                                        base_url.replace("https://", "").replace("http://", "").replace("/", "-"));
+                                    discover_command.generate_flow(&api_map, &flow_name).await?;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => println!("❌ Discovery failed: {}", e),
+                }
+            }
+            Some("predict") => {
+                if parts.len() < 2 {
+                    println!("❌ Usage: predict <BASE_URL>");
+                    println!("Examples:");
+                    println!("  predict https://api.myapp.com");
+                    println!("  predict https://api.github.com");
+                    println!("  predict https://jsonplaceholder.typicode.com");
+                    return Ok(());
+                }
+
+                let base_url = &parts[1];
+                let predict_command = PredictCommand::new(self.config.clone());
+                
+                match predict_command.predict_health(base_url).await {
+                    Ok(prediction) => {
+                        // Results are already displayed in the predict_health method
+                        println!("\n🎯 Prediction complete! Use these insights to prevent issues.");
+                    }
+                    Err(e) => println!("❌ Prediction failed: {}", e),
+                }
+            }
+            Some("ask") => {
+                if parts.len() < 2 {
+                    println!("❌ Usage: ask \"natural language request\"");
+                    println!("Examples:");
+                    println!("  ask \"Create a POST request to add a new user\"");
+                    println!("  ask \"Generate 10 test users with realistic data\"");
+                    println!("  ask \"Check if the API is working properly\"");
+                    println!("  ask \"Make a request to get all products\"");
+                    return Ok(());
+                }
+
+                let request = parts[1..].join(" ").trim_matches('"').to_string();
+                let ask_command = AskCommand::new(self.config.clone());
+                
+                match ask_command.execute(&request).await {
+                    Ok(_) => {},
+                    Err(e) => println!("❌ Ask failed: {}", e),
+                }
+            }
+            Some("generate") => {
+                if parts.len() < 2 {
+                    println!("❌ Usage: generate <data_type> [count]");
+                    println!("Examples:");
+                    println!("  generate users 10");
+                    println!("  generate products 25");
+                    println!("  generate orders 5");
+                    return Ok(());
+                }
+
+                let data_type = &parts[1];
+                let count = parts.get(2)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(5);
+                
+                let generate_command = GenerateCommand::new(self.config.clone());
+                
+                match generate_command.generate(data_type, count).await {
+                    Ok(_) => {},
+                    Err(e) => println!("❌ Generate failed: {}", e),
+                }
+            }
+            Some("monitor") => {
+                if parts.len() < 2 {
+                    println!("❌ Usage: monitor <URL> [--smart]");
+                    println!("Examples:");
+                    println!("  monitor https://api.example.com");
+                    println!("  monitor https://api.example.com --smart");
+                    return Ok(());
+                }
+
+                let url = &parts[1];
+                let smart = parts.contains(&"--smart".to_string());
+                
+                let monitor_command = MonitorCommand::new(self.config.clone());
+                
+                match monitor_command.monitor(url, smart).await {
+                    Ok(_) => {},
+                    Err(e) => println!("❌ Monitor failed: {}", e),
+                }
+            }
+            Some("explain") => {
+                if let Some(last_response) = &self.last_response {
+                    let explain_command = ExplainCommand::new(self.config.clone());
+                    
+                    match explain_command.explain_response(last_response, None).await {
+                        Ok(_) => {},
+                        Err(e) => println!("❌ Explain failed: {}", e),
+                    }
+                } else {
+                    println!("❌ No previous response to explain. Make an API call first!");
+                    println!("Usage: call GET https://api.example.com/users, then use 'explain'");
+                }
+            }
+            Some("fix") => {
+                if parts.len() < 2 {
+                    println!("❌ Usage: fix <URL>");
+                    println!("Examples:");
+                    println!("  fix https://api.broken.com");
+                    println!("  fix https://api.example.com/slow-endpoint");
+                    return Ok(());
+                }
+
+                let url = &parts[1];
+                let fix_command = FixCommand::new(self.config.clone());
+                
+                match fix_command.auto_fix(url).await {
+                    Ok(_) => {},
+                    Err(e) => println!("❌ Fix failed: {}", e),
+                }
+            }
             Some("config") => {
                 ConfigCommand::new(self.config.clone())
                     .execute(&parts.iter().map(|s| s.as_str()).collect::<Vec<_>>())
                     .await?;
                 
-                // Reload config and update manager
+                // Reload config
                 self.config = Config::load()?;
-                self.collection_manager = CollectionManager::new(
-                    self.collection_manager.get_collections_dir(),
-                    self.config.clone()
-                );
             }
             Some("configure") => {
                 match parts.get(1).map(String::as_str) {
@@ -385,204 +551,6 @@ impl NutsShell {
                     .execute(&parts.iter().map(|s| s.to_string()).collect::<Vec<String>>())
                     .await?;
             }
-            Some("flow") => {
-                match parts.get(1).map(String::as_str) {
-                    Some("new") => {
-                        if let Some(name) = parts.get(2) {
-                            println!("🔨 Creating new OpenAPI flow: {}", style(name).cyan());
-                            self.collection_manager.create_collection(name)?;
-                            println!("✅ Flow created. Use 'flow add {}' to add endpoints", name);
-                        } else {
-                            println!("❌ Usage: flow new <name>");
-                            println!("Creates a new OpenAPI specification flow");
-                        }
-                    }
-                    Some("add") => {
-                        if parts.len() >= 4 {
-                            let flow = &parts[2];
-                            let method = parts[3].to_uppercase();
-                            let path = parts.get(4).map(|s| s.to_string());
-                            
-                            match (method.as_str(), path) {
-                                (m, Some(p)) if ["GET", "POST", "PUT", "DELETE", "PATCH"].contains(&m) => {
-                                    println!("📝 Adding {} endpoint {} to flow {}", 
-                                        style(m).cyan(),
-                                        style(&p).green(),
-                                        style(flow).yellow()
-                                    );
-                                    self.collection_manager.add_endpoint(flow, m, &p).await?;
-                                },
-                                _ => {
-                                    println!("❌ Usage: flow add <name> <METHOD> <path>");
-                                    println!("Example: flow add my-api GET /users");
-                                    println!("Supported methods: GET, POST, PUT, DELETE, PATCH");
-                                }
-                            }
-                        } else {
-                            println!("❌ Usage: flow add <name> <METHOD> <path>");
-                        }
-                    }
-                    Some("run") => {
-                        if parts.len() >= 4 {
-                            let flow = &parts[2];
-                            let endpoint = &parts[3];
-                            let args = &parts[4..];
-                            println!("🚀 Running endpoint {} from flow {}", 
-                                style(endpoint).green(),
-                                style(flow).yellow()
-                            );
-                            self.collection_manager.run_endpoint(flow, endpoint, args).await?;
-                        } else {
-                            println!("❌ Usage: flow run <name> <endpoint> [args...]");
-                            println!("Example: flow run my-api /users --data '{{\"name\": \"test\"}}'");
-                        }
-                    }
-                    Some("mock") => {
-                        if let Some(name) = parts.get(2) {
-                            let port = parts.get(3)
-                                .and_then(|p| p.parse().ok())
-                                .unwrap_or(3000);
-                            println!("🎭 Starting mock server for flow {} on port {}", 
-                                style(name).yellow(),
-                                style(port).cyan()
-                            );
-                            self.collection_manager.start_mock_server(name, port).await?;
-                        } else {
-                            println!("❌ Usage: flow mock <name> [port]");
-                            println!("Starts a mock server based on OpenAPI specification");
-                        }
-                    }
-                    Some("configure_mock_data") => {
-                        if parts.len() >= 4 {
-                            let flow = &parts[2];
-                            let endpoint = &parts[3];
-                            println!("⚙️  Configuring mock data for endpoint {} in flow {}", 
-                                style(endpoint).green(),
-                                style(flow).yellow()
-                            );
-                            self.collection_manager.configure_mock_data(
-                                flow, 
-                                endpoint,
-                                &mut self.editor
-                            ).await?;
-                        } else {
-                            println!("❌ Usage: flow configure_mock_data <name> <endpoint>");
-                            println!("Example: flow configure_mock_data my-api /users");
-                        }
-                    }
-                    Some("perf") => {
-                        let flow = parts.get(2)
-                            .ok_or("Usage: flow perf <name> [endpoint] [--users N] [--duration Ns]")?;
-                        let endpoint = parts.get(3);
-                        let options = &parts[if endpoint.is_some() { 4 } else { 3 }..];
-                        
-                        if endpoint.is_some() {
-                            println!("🚄 Running performance test for endpoint {} in flow {}", 
-                                style(endpoint.unwrap()).green(),
-                                style(flow).yellow()
-                            );
-                        } else {
-                            println!("🚄 Running performance tests for flow {}", 
-                                style(flow).yellow()
-                            );
-                        }
-                        
-                        self.collection_manager.run_endpoint_perf(
-                            flow,
-                            endpoint.map(String::as_str),
-                            options
-                        ).await?;
-                    }
-                    Some("docs") => {
-                        if let Some(name) = parts.get(2) {
-                            let format = parts.get(3).map(String::as_str).unwrap_or("yaml");
-                            match format {
-                                "yaml" | "json" => {
-                                    println!("📚 Generating OpenAPI documentation for flow {}", 
-                                        style(name).yellow()
-                                    );
-                                    self.collection_manager.generate_openapi(name, format).await?;
-                                },
-                                _ => println!("❌ Supported formats: yaml, json")
-                            }
-                        } else {
-                            println!("❌ Usage: flow docs <name> [format]");
-                            println!("Generates OpenAPI documentation (yaml or json)");
-                        }
-                    }
-                    Some("list") => {
-                        println!("📋 Available flows:");
-                        self.collection_manager.list_collections().await?;
-                    }
-                    Some("story") | Some("s") => {
-                        if let Some(flow) = parts.get(2) {
-                            let api_key = self.config.anthropic_api_key.clone()
-                                .ok_or("API key not configured. Use 'config api-key' to set it")?;
-                            
-                            StoryMode::new(flow.to_string(), api_key)
-                                .start(&mut self.editor)
-                                .await?;
-                        } else {
-                            println!("❌ Usage: story <flow>");
-                            println!("Start an AI-guided API story session");
-                        }
-                    }
-                    _ => {
-                        println!("Available flow commands:");
-                        println!("  {} - Create new flow", style("new <name>").green());
-                        println!("  {} - Add endpoint to flow", style("add <name> <METHOD> <path>").green());
-                        println!("  {} - Run specific endpoint", style("run <name> <endpoint> [args...]").green());
-                        println!("  {} - Start mock server", style("mock <name> [port]").green());
-                        println!("  {} - Configure mock responses", style("configure_mock_data <name> <endpoint>").green());
-                        println!("  {} - Run performance tests", style("perf <name> <endpoint> [options]").green());
-                        println!("  {} - Generate OpenAPI docs", style("docs <name> [format]").green());
-                        println!("  {} - List all flows", style("list").green());
-                    }
-                }
-            }
-            Some("save") => {
-                if parts.len() >= 3 {
-                    let collection_name = &parts[1];
-                    let endpoint_name = &parts[2];
-                    if let Some(last_request) = &self.last_request {
-                        if let Some(last_response) = &self.last_response {
-                            self.collection_manager.save_request_to_collection(
-                                collection_name,
-                                endpoint_name,
-                                last_request,
-                                Some(last_response.clone()),
-                            ).await?;
-                        } else {
-                            println!("❌ No response to save. Make a call first!");
-                        }
-                    } else {
-                        println!("❌ No request to save. Make a call first!");
-                    }
-                } else {
-                    println!("❌ Usage: save <collection_name> <endpoint_name>");
-                }
-            }
-            Some("configure_mock_data") => {
-                if parts.len() >= 3 {
-                    let flow = &parts[1];
-                    let endpoint = &parts[2];
-                    self.collection_manager.configure_mock_data(
-                        flow, 
-                        endpoint,
-                        &mut self.editor
-                    ).await?;
-                } else {
-                    println!("❌ Usage: configure_mock_data <collection_name> <endpoint_name>");
-                }
-            }
-            Some("daemon") => {
-                match parts.get(1).map(String::as_str) {
-                    Some("start") => println!("Starting NUTS daemon..."),
-                    Some("stop") => println!("Stopping NUTS daemon..."),
-                    Some("status") => println!("NUTS daemon status: Not running"),
-                    _ => println!("Usage: daemon [start|stop|status]"),
-                }
-            },
             _ => {
                 if let Some(suggestion) = self.ai_suggest_command(cmd).await {
                     println!("🤖 AI Suggests: {}", style(suggestion).blue());
