@@ -6,7 +6,6 @@ use crate::config::Config;
 use crate::commands::call::CallCommand;
 use crate::commands::generate::GenerateCommand;
 use serde_json::Value;
-use std::collections::HashMap;
 
 pub struct AskCommand {
     config: Config,

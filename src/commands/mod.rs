@@ -19,11 +19,13 @@ pub type CommandResult = Result<(), Box<dyn std::error::Error>>;
 
 // Add shared command context
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct CommandContext {
     pub flows: Arc<crate::flows::CollectionManager>,
 }
 
 // Add shared command traits
+#[allow(dead_code)]
 pub trait Command {
     fn name(&self) -> &'static str;
     fn description(&self) -> &'static str;
@@ -31,13 +33,13 @@ pub trait Command {
     fn execute(&self, ctx: &CommandContext, args: &[String]) -> CommandResult;
 }
 
-// Re-export
-pub use config::ConfigCommand;
-pub use test::TestCommand;
-pub use discover::DiscoverCommand;
-pub use predict::PredictCommand;
-pub use ask::AskCommand;
-pub use generate::GenerateCommand;
-pub use monitor::MonitorCommand;
-pub use explain::ExplainCommand;
-pub use fix::FixCommand;
+// Re-export (commented out unused imports)
+// pub use config::ConfigCommand;
+// pub use test::TestCommand;
+// pub use discover::DiscoverCommand;
+// pub use predict::PredictCommand;
+// pub use ask::AskCommand;
+// pub use generate::GenerateCommand;
+// pub use monitor::MonitorCommand;
+// pub use explain::ExplainCommand;
+// pub use fix::FixCommand;

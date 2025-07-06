@@ -1,9 +1,7 @@
-use std::collections::HashMap;
 use anthropic::{
     client::ClientBuilder,
     types::{Message, ContentBlock, MessagesRequestBuilder, Role},
 };
-use serde_json::json;
 use crate::config::Config;
 use crate::commands::call::CallCommand;
 

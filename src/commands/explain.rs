@@ -60,6 +60,7 @@ impl ExplainCommand {
     }
 
     /// Explain API errors with helpful solutions
+    #[allow(dead_code)]
     pub async fn explain_error(&self, error: &str, endpoint: &str) -> Result<(), Box<dyn std::error::Error>> {
         println!("🚨 AI analyzing error...");
         
@@ -104,6 +105,7 @@ impl ExplainCommand {
     }
 
     /// Explain HTTP status codes with context
+    #[allow(dead_code)]
     pub async fn explain_status_code(&self, status_code: u16, context: &str) -> Result<(), Box<dyn std::error::Error>> {
         println!("📊 AI explaining status code {}...", status_code);
         

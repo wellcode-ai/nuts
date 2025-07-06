@@ -4,7 +4,6 @@ use anthropic::{
 };
 use crate::config::Config;
 use serde_json::Value;
-use rand::Rng;
 
 pub struct GenerateCommand {
     config: Config,
@@ -77,6 +76,7 @@ impl GenerateCommand {
     }
 
     /// Generate data for specific API endpoint testing
+    #[allow(dead_code)]
     pub async fn generate_for_endpoint(&self, endpoint: &str, method: &str) -> Result<Value, Box<dyn std::error::Error>> {
         let api_key = self.config.anthropic_api_key.as_ref()
             .ok_or("API key not configured. Use 'config api-key' to set it")?;

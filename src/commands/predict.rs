@@ -85,9 +85,9 @@ impl PredictCommand {
         Ok(metrics)
     }
 
-    async fn probe_performance(&self, base_url: &str) -> Result<PerformanceData, Box<dyn std::error::Error>> {
+    async fn probe_performance(&self, _base_url: &str) -> Result<PerformanceData, Box<dyn std::error::Error>> {
         // Run a quick mini load test
-        let perf_command = PerfCommand::new(&self.config);
+        let _perf_command = PerfCommand::new(&self.config);
         
         // This would integrate with the existing perf command
         // For now, simulate some performance data
@@ -338,9 +338,11 @@ Format as JSON with these sections:
 #[derive(Debug)]
 struct BaselineMetrics {
     response_time: Duration,
+    #[allow(dead_code)]
     status_code: u16,
     content_length: usize,
     server_info: Option<String>,
+    #[allow(dead_code)]
     headers: HashMap<String, String>,
 }
 
@@ -350,6 +352,7 @@ struct PerformanceData {
     p95_response_time: Duration,
     requests_per_second: f64,
     error_rate: f64,
+    #[allow(dead_code)]
     concurrent_users_tested: u32,
 }
 
@@ -357,6 +360,7 @@ struct PerformanceData {
 struct SecurityAnalysis {
     https_enabled: bool,
     security_headers: Vec<String>,
+    #[allow(dead_code)]
     vulnerabilities: Vec<String>,
     compliance_score: f64,
 }

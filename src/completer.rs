@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 #[derive(Clone, Default)]
 pub struct NutsCompleter {
+    #[allow(dead_code)]
     commands: HashMap<String, String>,
     aliases: HashMap<String, String>,
 }

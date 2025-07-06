@@ -6,6 +6,7 @@ use reqwest::Client;
 use crate::config::Config;
 
 pub struct SecurityCommand {
+    #[allow(dead_code)]
     config: Config,
     deep_scan: bool,
     auth_token: Option<String>,
@@ -58,7 +59,7 @@ impl SecurityCommand {
         let sections: Vec<&str> = analysis.split("\n\n").collect();
         
         for section in sections {
-            if section.starts_with(|c: char| c.is_digit(10)) {
+            if section.starts_with(|c: char| c.is_ascii_digit()) {
                 // Main section headers
                 let (header, content) = section.split_once(":\n").unwrap_or((section, ""));
                 println!("{}", style(header).yellow().bold());
@@ -70,7 +71,7 @@ impl SecurityCommand {
                     if line.starts_with("- ") {
                         println!("  {} {}", 
                             style("•").cyan(),
-                            style(&line[2..]).white()
+                            style(line.strip_prefix("- ").unwrap_or(line)).white()
                         );
                     } else if line.starts_with("`") {
                         // Format code/technical items
@@ -171,7 +172,7 @@ impl SecurityCommand {
         // Get AI analysis
         let messages = vec![Message {
             role: Role::User,
-            content: vec![ContentBlock::Text { text: analysis_prompt.into() }]
+            content: vec![ContentBlock::Text { text: analysis_prompt }]
         }];
 
         let messages_request = MessagesRequestBuilder::default()
@@ -184,7 +185,7 @@ impl SecurityCommand {
 
         // Print the analysis
         if let Some(ContentBlock::Text { text }) = messages_response.content.first() {
-            self.display_security_analysis(&text).await;
+            self.display_security_analysis(text).await;
         } else {
             println!("❌ Error: Could not parse AI response");
         }

@@ -40,6 +40,7 @@ impl Config {
         Self::load_from_file()
     }
 
+    #[allow(dead_code)]
     pub fn merge(mut self, other: Config) -> Self {
         if self.anthropic_api_key.is_none() {
             self.anthropic_api_key = other.anthropic_api_key;

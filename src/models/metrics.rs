@@ -19,6 +19,7 @@ pub struct MetricsSummary {
     pub total_requests: usize,
     pub error_rate: f64,
     pub response_time_ranges: HashMap<String, usize>,
+    #[allow(dead_code)]
     pub requests_per_second: Vec<(SystemTime, usize)>,
     pub peak_rps: usize,
 }

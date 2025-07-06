@@ -411,6 +411,7 @@ impl CallCommand {
         Ok(options)
     }
 
+    #[allow(dead_code)]
     async fn print_response(&self, response: reqwest::Response) -> CommandResult {
         println!("📡 Status: {}", style(response.status()).yellow());
         
@@ -648,12 +649,10 @@ impl CallCommand {
         }
         
         // CORS recommendations
-        if headers.contains_key("access-control-allow-origin") {
-            if headers.get("access-control-allow-origin")
+        if headers.get("access-control-allow-origin")
                      .and_then(|v| v.to_str().ok())
                      .map_or(false, |v| v == "*") {
-                recommendations.push("Consider restricting CORS Access-Control-Allow-Origin".to_string());
-            }
+            recommendations.push("Consider restricting CORS Access-Control-Allow-Origin".to_string());
         }
         
         recommendations

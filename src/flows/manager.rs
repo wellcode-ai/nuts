@@ -13,12 +13,14 @@ use console::style;
 use crate::config::Config;
 use url;
 
+#[allow(dead_code)]
 pub struct CollectionManager {
     collections_dir: PathBuf,
     config: Config,
     ai_client: AnthropicClient,
 }
 
+#[allow(dead_code)]
 impl CollectionManager {
     pub fn new(collections_dir: PathBuf, config: Config) -> Self {
         let api_key = config.anthropic_api_key.clone()
@@ -191,7 +193,7 @@ impl CollectionManager {
         &self,
         flow: &str,
         endpoint: &str,
-        editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>
+        _editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Check for API key
         let api_key = self.config.anthropic_api_key.clone()
@@ -447,13 +449,13 @@ impl CollectionManager {
 
             // Fallback to testing all GET endpoints
             println!("ℹ️  Testing all GET endpoints...");
-            let perf = PerfCommand::new(&self.config);
+            let _perf = PerfCommand::new(&self.config);
             for (path, item) in &spec.paths {
-                if let Some(op) = &item.get {
+                if let Some(_op) = &item.get {
                     println!("\n🚀 Testing GET {}", style(path).green());
                     self.run_single_endpoint_test(path, "GET", users, duration, base_url).await?;
                 }
-                if let Some(op) = &item.post {
+                if let Some(_op) = &item.post {
                     println!("\n🚀 Testing POST {}", style(path).green());
                     self.run_single_endpoint_test(path, "POST", users, duration, base_url).await?;
                 }
@@ -579,7 +581,7 @@ impl CollectionManager {
     pub async fn save_request_to_collection(
         &self,
         flow: &str,
-        endpoint_name: &str,
+        _endpoint_name: &str,
         request: &(String, String, Option<String>),
         response: Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {

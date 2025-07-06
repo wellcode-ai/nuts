@@ -113,6 +113,7 @@ pub struct MockDataConfig {
 }
 
 impl OpenAPISpec {
+    #[allow(dead_code)]
     pub fn new(name: &str) -> Self {
         Self {
             openapi: "3.0.0".to_string(),
@@ -129,12 +130,14 @@ impl OpenAPISpec {
         }
     }
 
+    #[allow(dead_code)]
     pub fn load(path: &PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
         let contents = fs::read_to_string(path)?;
         let spec = serde_yaml::from_str(&contents)?;
         Ok(spec)
     }
 
+    #[allow(dead_code)]
     pub fn save(&self, path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         let yaml = serde_yaml::to_string(&self)?;
         fs::write(path, yaml)?;
@@ -143,6 +146,7 @@ impl OpenAPISpec {
 }
 
 impl PathItem {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             get: None,
@@ -154,6 +158,7 @@ impl PathItem {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_operation(&self) -> Option<(&'static str, &Operation)> {
         if let Some(op) = &self.get { return Some(("GET", op)) }
         if let Some(op) = &self.post { return Some(("POST", op)) }

@@ -1,12 +1,10 @@
-use std::collections::{HashMap, HashSet};
 use anthropic::{
     client::ClientBuilder,
     types::{Message, ContentBlock, MessagesRequestBuilder, Role},
 };
 use reqwest;
-use serde_json::{json, Value};
+use serde_json::Value;
 use crate::config::Config;
-use crate::commands::call::CallCommand;
 
 pub struct DiscoverCommand {
     config: Config,
@@ -26,6 +24,7 @@ pub struct ApiMap {
     pub base_url: String,
     pub endpoints: Vec<ApiEndpoint>,
     pub authentication: Option<String>,
+    #[allow(dead_code)]
     pub rate_limits: Option<String>,
     pub documentation: Option<String>,
 }
@@ -128,7 +127,7 @@ impl DiscoverCommand {
         }
 
         // Extract authentication info
-        if let Some(security) = spec.get("security") {
+        if let Some(_security) = spec.get("security") {
             api_map.authentication = Some("Found security schemes".to_string());
         }
 

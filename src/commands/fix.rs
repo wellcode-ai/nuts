@@ -4,7 +4,6 @@ use anthropic::{
 };
 use crate::config::Config;
 use crate::commands::call::CallCommand;
-use crate::commands::security::SecurityCommand;
 use serde_json::Value;
 
 pub struct FixCommand {
@@ -263,6 +262,7 @@ struct ApiDiagnosis {
     performance_issues: Vec<String>,
     security_issues: Vec<String>,
     response_issues: Vec<String>,
+    #[allow(dead_code)]
     status_code: u16,
     response_time_ms: u128,
 }

@@ -23,12 +23,15 @@ use anthropic::types::ContentBlock;
 use anthropic::types::MessagesRequestBuilder;
 use anthropic::types::Role;
 use indicatif::{ProgressBar, ProgressStyle};
-use std::time::Duration;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ShellError {
+    #[allow(dead_code)]
     ApiError(String),
+    #[allow(dead_code)]
     ConfigError(String),
+    #[allow(dead_code)]
     IoError(std::io::Error),
 }
 
@@ -47,19 +50,24 @@ impl std::error::Error for ShellError {}
 pub struct NutsShell {
     editor: Editor<NutsCompleter, DefaultHistory>,
     config: Config,
+    #[allow(dead_code)]
     history: Vec<String>,
+    #[allow(dead_code)]
     suggestions: Vec<String>,
+    #[allow(dead_code)]
     last_request: Option<(String, String, Option<String>)>,
     last_response: Option<String>,
 }
 
 impl NutsShell {
+    #[allow(dead_code)]
     fn get_config_path() -> PathBuf {
         let mut path = dirs::home_dir().expect("Could not find home directory");
         path.push(".nuts_config.json");
         path
     }
 
+    #[allow(dead_code)]
     fn save_api_key(api_key: &str) -> Result<(), Box<dyn std::error::Error>> {
         let config = serde_json::json!({
             "anthropic_api_key": api_key.to_string()
@@ -278,7 +286,7 @@ impl NutsShell {
                 let predict_command = PredictCommand::new(self.config.clone());
                 
                 match predict_command.predict_health(base_url).await {
-                    Ok(prediction) => {
+                    Ok(_prediction) => {
                         // Results are already displayed in the predict_health method
                         println!("\n🎯 Prediction complete! Use these insights to prevent issues.");
                     }
@@ -399,7 +407,7 @@ impl NutsShell {
                         println!("Current Configuration:");
                         println!("  API Key: {}", self.config.anthropic_api_key
                             .as_ref()
-                            .map(|k| "********".to_string())
+                            .map(|_k| "********".to_string())
                             .unwrap_or_else(|| "Not set".to_string()));
                     }
                     _ => {
@@ -534,7 +542,7 @@ impl NutsShell {
                 }
 
                 // Check for API key
-                let api_key = self.config.anthropic_api_key.clone()
+                let _api_key = self.config.anthropic_api_key.clone()
                     .ok_or("API key not configured. Use 'config api-key' to set it")?;
 
                 // Parse options
@@ -617,10 +625,12 @@ impl NutsShell {
         }
     }
 
+    #[allow(dead_code)]
     fn store_last_request(&mut self, method: String, url: String, body: Option<String>) {
         self.last_request = Some((method, url, body));
     }
 
+    #[allow(dead_code)]
     fn handle_error(&self, error: Box<dyn std::error::Error>) {
         match error.downcast_ref::<ShellError>() {
             Some(ShellError::ApiError(msg)) => {
@@ -635,22 +645,27 @@ impl NutsShell {
         }
     }
 
+    #[allow(dead_code)]
     fn print_info(&self, msg: &str) {
         println!("ℹ️  {}", style(msg).blue());
     }
 
+    #[allow(dead_code)]
     fn print_success(&self, msg: &str) {
         println!("✅ {}", style(msg).green());
     }
 
+    #[allow(dead_code)]
     fn print_warning(&self, msg: &str) {
         println!("⚠️  {}", style(msg).yellow());
     }
 
+    #[allow(dead_code)]
     fn print_error(&self, msg: &str) {
         println!("❌ {}", style(msg).red());
     }
 
+    #[allow(dead_code)]
     fn show_command_help(&self, command: &str) {
         match command {
             "call" => {
@@ -681,6 +696,7 @@ impl NutsShell {
         }
     }
 
+    #[allow(dead_code)]
     fn with_progress<F, T>(&self, msg: &str, f: F) -> T 
     where 
         F: FnOnce(&ProgressBar) -> T 

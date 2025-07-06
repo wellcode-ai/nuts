@@ -6,7 +6,7 @@ use crate::config::Config;
 use crate::commands::call::CallCommand;
 use std::time::{Duration, SystemTime};
 use serde_json::json;
-use tokio::time::{sleep, interval};
+use tokio::time::interval;
 
 pub struct MonitorCommand {
     config: Config,
@@ -18,6 +18,7 @@ pub struct MonitorResult {
     pub status: String,
     pub response_time: Duration,
     pub issues: Vec<String>,
+    #[allow(dead_code)]
     pub recommendations: Vec<String>,
 }
 

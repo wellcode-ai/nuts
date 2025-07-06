@@ -1,5 +1,4 @@
 use console::style;
-use rustyline::Editor;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Duration;
 use crate::commands::call::CallCommand;
@@ -8,17 +7,16 @@ use anthropic::{
     types::{Message, ContentBlock, MessagesRequestBuilder, Role},
 };
 use std::collections::HashMap;
-use serde_json::Value;
 use crate::flows::{OpenAPISpec, PathItem, Operation, RequestBody, Response, MediaType, Schema};
 use url::Url;
-use crate::config::Config;
-use crate::flows::manager::CollectionManager;
 
+#[allow(dead_code)]
 pub struct StoryMode {
     flow: String,
     api_key: String,
 }
 
+#[allow(dead_code)]
 impl StoryMode {
     pub fn new(flow: String, api_key: String) -> Self {
         Self { flow, api_key }

@@ -1,38 +1,27 @@
 use crate::flows::{OpenAPISpec, Operation};
-use std::error::Error;
 use std::net::SocketAddr;
 use axum::{
     Router,
-    routing::{get, post, put, delete, patch},
+    routing::{get, post},
     Json,
     http::StatusCode,
-    response::IntoResponse,
 };
 use serde_json::{Value, json};
-use tokio::net::TcpListener;
-use tracing::{info, warn, error};
-use url;
-use tokio::signal;
-use tower_http::trace::TraceLayer;
-use std::time::Duration;
-use axum::response::Response;
-use axum::http::Request;
-use tracing_subscriber::{self, fmt::format::FmtSpan};
 use std::collections::HashMap;
 use std::sync::Arc;
-use rand::Rng;
 use axum::extract::Path;
 use axum_server::Server;
-use std::future::Future;
 use tokio::signal::ctrl_c;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[allow(dead_code)]
 pub struct MockServer {
     spec: OpenAPISpec,
     port: u16,
     running: Arc<AtomicBool>,
 }
 
+#[allow(dead_code)]
 impl MockServer {
     pub fn new(spec: OpenAPISpec, port: u16) -> Self {
         Self { 

@@ -12,7 +12,7 @@ impl ConfigCommand {
     }
 
     pub async fn execute(&self, args: &[&str]) -> CommandResult {
-        match args.get(1).map(|s| *s) {
+        match args.get(1).copied() {
             Some("api-key") => {
                 println!("Enter your Anthropic API key:");
                 let key = dialoguer::Input::<String>::new()
