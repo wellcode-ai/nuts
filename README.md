@@ -1,6 +1,6 @@
 # NUTS - Network Universal Testing Suite
 
-**The AI-Powered CURL Killer** 🚀
+**The AI-Powered CURL** 🚀
 
 NUTS is a revolutionary CLI tool that combines the power of traditional API testing with cutting-edge AI capabilities. It's like having a smart assistant that understands your testing needs and helps you work faster and more efficiently.
 
