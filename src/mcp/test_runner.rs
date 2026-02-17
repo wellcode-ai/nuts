@@ -63,8 +63,14 @@ impl ServerConfig {
                         .collect(),
                 })
             }
-            (None, Some(url), None) => Ok(TransportConfig::Sse { url: url.clone() }),
-            (None, None, Some(url)) => Ok(TransportConfig::Http { url: url.clone() }),
+            (None, Some(url), None) => Ok(TransportConfig::Sse {
+                url: url.clone(),
+                bearer: None,
+            }),
+            (None, None, Some(url)) => Ok(TransportConfig::Http {
+                url: url.clone(),
+                bearer: None,
+            }),
             _ => Err(NutsError::InvalidInput {
                 message: "server config must have exactly one of: command, sse, http".into(),
             }),
@@ -1151,7 +1157,7 @@ tests:
         assert_eq!(tf.server.sse, Some("http://localhost:3001/sse".into()));
         let config = tf.server.to_transport_config().unwrap();
         match config {
-            TransportConfig::Sse { url } => assert_eq!(url, "http://localhost:3001/sse"),
+            TransportConfig::Sse { url, .. } => assert_eq!(url, "http://localhost:3001/sse"),
             _ => panic!("expected SSE transport"),
         }
     }
@@ -1168,7 +1174,7 @@ tests:
         let tf: TestFile = serde_yaml::from_str(yaml).unwrap();
         let config = tf.server.to_transport_config().unwrap();
         match config {
-            TransportConfig::Http { url } => assert_eq!(url, "http://localhost:8080/mcp"),
+            TransportConfig::Http { url, .. } => assert_eq!(url, "http://localhost:8080/mcp"),
             _ => panic!("expected HTTP transport"),
         }
     }

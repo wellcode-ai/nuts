@@ -192,8 +192,12 @@ struct McpTransportArgs {
     #[arg(long)]
     http: Option<String>,
 
+    /// Bearer token for SSE/HTTP authentication
+    #[arg(long)]
+    bearer: Option<String>,
+
     /// Set environment variable for stdio transport (KEY=VALUE), can be repeated
-    #[arg(long = "env", value_name = "KEY=VALUE")]
+    #[arg(long = "set-env", value_name = "KEY=VALUE")]
     env_vars: Vec<String>,
 
     /// Connection / call timeout in seconds
@@ -219,8 +223,12 @@ struct McpTestArgs {
     #[arg(long)]
     http: Option<String>,
 
+    /// Bearer token for SSE/HTTP authentication
+    #[arg(long)]
+    bearer: Option<String>,
+
     /// Set environment variable for stdio transport (KEY=VALUE), can be repeated
-    #[arg(long = "env", value_name = "KEY=VALUE")]
+    #[arg(long = "set-env", value_name = "KEY=VALUE")]
     env_vars: Vec<String>,
 
     /// Connection / call timeout in seconds
@@ -243,8 +251,12 @@ struct McpPerfArgs {
     #[arg(long)]
     http: Option<String>,
 
+    /// Bearer token for SSE/HTTP authentication
+    #[arg(long)]
+    bearer: Option<String>,
+
     /// Set environment variable for stdio transport (KEY=VALUE), can be repeated
-    #[arg(long = "env", value_name = "KEY=VALUE")]
+    #[arg(long = "set-env", value_name = "KEY=VALUE")]
     env_vars: Vec<String>,
 
     /// Connection / call timeout in seconds
@@ -287,8 +299,12 @@ struct McpSnapshotArgs {
     #[arg(long)]
     http: Option<String>,
 
+    /// Bearer token for SSE/HTTP authentication
+    #[arg(long)]
+    bearer: Option<String>,
+
     /// Set environment variable for stdio transport (KEY=VALUE), can be repeated
-    #[arg(long = "env", value_name = "KEY=VALUE")]
+    #[arg(long = "set-env", value_name = "KEY=VALUE")]
     env_vars: Vec<String>,
 
     /// Connection / call timeout in seconds
@@ -567,6 +583,7 @@ fn resolve_transport(
     stdio: &Option<String>,
     sse: &Option<String>,
     http: &Option<String>,
+    bearer: &Option<String>,
     env_vars: &[String],
 ) -> std::result::Result<crate::mcp::types::TransportConfig, Box<dyn std::error::Error>> {
     use crate::mcp::types::TransportConfig;
@@ -582,10 +599,16 @@ fn resolve_transport(
         return Ok(TransportConfig::Stdio { command, args, env });
     }
     if let Some(ref url) = sse {
-        return Ok(TransportConfig::Sse { url: url.clone() });
+        return Ok(TransportConfig::Sse {
+            url: url.clone(),
+            bearer: bearer.clone(),
+        });
     }
     if let Some(ref url) = http {
-        return Ok(TransportConfig::Http { url: url.clone() });
+        return Ok(TransportConfig::Http {
+            url: url.clone(),
+            bearer: bearer.clone(),
+        });
     }
 
     Err("A transport is required. Use --stdio, --sse, or --http.".into())
@@ -616,6 +639,7 @@ fn mcp_connect(
         &transport.stdio,
         &transport.sse,
         &transport.http,
+        &transport.bearer,
         &transport.env_vars,
     )?;
 
@@ -650,6 +674,7 @@ fn mcp_discover(
         &transport.stdio,
         &transport.sse,
         &transport.http,
+        &transport.bearer,
         &transport.env_vars,
     )?;
 
@@ -728,6 +753,7 @@ fn mcp_perf(
         &perf_args.stdio,
         &perf_args.sse,
         &perf_args.http,
+        &perf_args.bearer,
         &perf_args.env_vars,
     )?;
 
@@ -792,6 +818,7 @@ fn mcp_snapshot(
         &snap_args.stdio,
         &snap_args.sse,
         &snap_args.http,
+        &snap_args.bearer,
         &snap_args.env_vars,
     )?;
 
@@ -888,6 +915,7 @@ fn mcp_security(
         &transport.stdio,
         &transport.sse,
         &transport.http,
+        &transport.bearer,
         &transport.env_vars,
     )?;
 
@@ -933,6 +961,7 @@ fn mcp_generate(
         &transport.stdio,
         &transport.sse,
         &transport.http,
+        &transport.bearer,
         &transport.env_vars,
     )?;
 

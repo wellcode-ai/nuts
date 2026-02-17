@@ -137,9 +137,17 @@ pub enum TransportConfig {
         env: Vec<(String, String)>,
     },
     /// Connect via Server-Sent Events (legacy SSE transport).
-    Sse { url: String },
+    Sse {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bearer: Option<String>,
+    },
     /// Connect via Streamable HTTP (the newest MCP transport).
-    Http { url: String },
+    Http {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bearer: Option<String>,
+    },
 }
 
 #[cfg(test)]

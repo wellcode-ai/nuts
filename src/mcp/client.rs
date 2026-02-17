@@ -5,7 +5,8 @@ use rmcp::{
     },
     service::{RunningService, ServiceExt},
     transport::{
-        ConfigureCommandExt, SseClientTransport, StreamableHttpClientTransport, TokioChildProcess,
+        streamable_http_client::StreamableHttpClientTransportConfig, ConfigureCommandExt,
+        SseClientTransport, StreamableHttpClientTransport, TokioChildProcess,
     },
     RoleClient,
 };
@@ -62,7 +63,19 @@ impl McpClient {
     }
 
     /// Connect to an MCP server via Server-Sent Events (legacy SSE transport).
-    pub async fn connect_sse(url: &str) -> Result<Self, NutsError> {
+    ///
+    /// Note: The SSE transport in rmcp 0.8.5 does not support bearer
+    /// authentication. If a bearer token is provided, a warning is printed
+    /// and the connection proceeds without auth. Use `--http` for
+    /// authenticated endpoints instead.
+    pub async fn connect_sse(url: &str, bearer: Option<&str>) -> Result<Self, NutsError> {
+        if bearer.is_some() {
+            eprintln!(
+                "Warning: SSE transport does not support bearer auth. \
+                 Use --http for authenticated endpoints."
+            );
+        }
+
         let transport = SseClientTransport::start(url)
             .await
             .map_err(|e| NutsError::Mcp {
@@ -81,8 +94,12 @@ impl McpClient {
     }
 
     /// Connect to an MCP server via Streamable HTTP (the newest transport).
-    pub async fn connect_http(url: &str) -> Result<Self, NutsError> {
-        let transport = StreamableHttpClientTransport::from_uri(url);
+    pub async fn connect_http(url: &str, bearer: Option<&str>) -> Result<Self, NutsError> {
+        let mut config = StreamableHttpClientTransportConfig::with_uri(url);
+        if let Some(token) = bearer {
+            config = config.auth_header(token);
+        }
+        let transport = StreamableHttpClientTransport::from_config(config);
         let client_info = Self::client_info();
         let service = client_info
             .serve(transport)
@@ -101,8 +118,12 @@ impl McpClient {
                 let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
                 Self::connect_stdio(command, &arg_refs, env).await
             }
-            TransportConfig::Sse { url } => Self::connect_sse(url).await,
-            TransportConfig::Http { url } => Self::connect_http(url).await,
+            TransportConfig::Sse { url, bearer } => {
+                Self::connect_sse(url, bearer.as_deref()).await
+            }
+            TransportConfig::Http { url, bearer } => {
+                Self::connect_http(url, bearer.as_deref()).await
+            }
         }
     }
 
