@@ -1,8 +1,8 @@
+use crate::config::Config;
 use anthropic::{
     client::ClientBuilder,
-    types::{Message, ContentBlock, MessagesRequestBuilder, Role},
+    types::{ContentBlock, Message, MessagesRequestBuilder, Role},
 };
-use crate::config::Config;
 use serde_json::Value;
 
 pub struct GenerateCommand {
@@ -15,15 +15,20 @@ impl GenerateCommand {
     }
 
     /// Generate realistic test data with AI
-    pub async fn generate(&self, data_type: &str, count: usize) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn generate(
+        &self,
+        data_type: &str,
+        count: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         println!("🎲 Generating {} realistic {} records...", count, data_type);
-        
-        let api_key = self.config.anthropic_api_key.as_ref()
+
+        let api_key = self
+            .config
+            .anthropic_api_key
+            .as_ref()
             .ok_or("API key not configured. Use 'config api-key' to set it")?;
 
-        let ai_client = ClientBuilder::default()
-            .api_key(api_key.clone())
-            .build()?;
+        let ai_client = ClientBuilder::default().api_key(api_key.clone()).build()?;
 
         let prompt = format!(
             "Generate {} realistic {} records for API testing. Make the data diverse and realistic.\n\n\
@@ -40,32 +45,37 @@ impl GenerateCommand {
             count, data_type
         );
 
-        let response = ai_client.messages(MessagesRequestBuilder::default()
-            .messages(vec![Message {
-                role: Role::User,
-                content: vec![ContentBlock::Text { text: prompt }],
-            }])
-            .model("claude-3-sonnet-20240229".to_string())
-            .max_tokens(2000_usize)
-            .build()?
-        ).await?;
+        let response = ai_client
+            .messages(
+                MessagesRequestBuilder::default()
+                    .messages(vec![Message {
+                        role: Role::User,
+                        content: vec![ContentBlock::Text { text: prompt }],
+                    }])
+                    .model("claude-3-sonnet-20240229".to_string())
+                    .max_tokens(2000_usize)
+                    .build()?,
+            )
+            .await?;
 
         if let Some(ContentBlock::Text { text }) = response.content.first() {
             // Try to parse as JSON
             if let Ok(data) = serde_json::from_str::<Value>(text) {
                 println!("\n✅ Generated test data:");
                 println!("{}", serde_json::to_string_pretty(&data)?);
-                
+
                 // Save to file for reuse
                 let filename = format!("nuts_generated_{}_{}.json", data_type, count);
                 std::fs::write(&filename, serde_json::to_string_pretty(&data)?)?;
                 println!("\n💾 Saved to: {}", filename);
-                
+
                 // Show usage examples
                 println!("\n🚀 Usage examples:");
-                println!("  call POST https://api.example.com/{} @{}", data_type, filename);
+                println!(
+                    "  call POST https://api.example.com/{} @{}",
+                    data_type, filename
+                );
                 println!("  cat {} | jq '.[0]'", filename);
-                
             } else {
                 // Fallback - show as text
                 println!("📄 Generated data:\n{}", text);
@@ -77,13 +87,18 @@ impl GenerateCommand {
 
     /// Generate data for specific API endpoint testing
     #[allow(dead_code)]
-    pub async fn generate_for_endpoint(&self, endpoint: &str, method: &str) -> Result<Value, Box<dyn std::error::Error>> {
-        let api_key = self.config.anthropic_api_key.as_ref()
+    pub async fn generate_for_endpoint(
+        &self,
+        endpoint: &str,
+        method: &str,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
+        let api_key = self
+            .config
+            .anthropic_api_key
+            .as_ref()
             .ok_or("API key not configured. Use 'config api-key' to set it")?;
 
-        let ai_client = ClientBuilder::default()
-            .api_key(api_key.clone())
-            .build()?;
+        let ai_client = ClientBuilder::default().api_key(api_key.clone()).build()?;
 
         let prompt = format!(
             "Generate realistic test data for this API endpoint:\n\n\
@@ -98,15 +113,18 @@ impl GenerateCommand {
             method, endpoint
         );
 
-        let response = ai_client.messages(MessagesRequestBuilder::default()
-            .messages(vec![Message {
-                role: Role::User,
-                content: vec![ContentBlock::Text { text: prompt }],
-            }])
-            .model("claude-3-sonnet-20240229".to_string())
-            .max_tokens(1000_usize)
-            .build()?
-        ).await?;
+        let response = ai_client
+            .messages(
+                MessagesRequestBuilder::default()
+                    .messages(vec![Message {
+                        role: Role::User,
+                        content: vec![ContentBlock::Text { text: prompt }],
+                    }])
+                    .model("claude-3-sonnet-20240229".to_string())
+                    .max_tokens(1000_usize)
+                    .build()?,
+            )
+            .await?;
 
         if let Some(ContentBlock::Text { text }) = response.content.first() {
             if let Ok(data) = serde_json::from_str::<Value>(text) {

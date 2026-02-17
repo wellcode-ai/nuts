@@ -1,9 +1,9 @@
-use console::{style, Term};
+use crate::config::Config;
+use crate::output::{colors, renderer};
 use anthropic::client::{Client as AnthropicClient, ClientBuilder};
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 use reqwest::header;
 use reqwest::Client;
-use crate::config::Config;
 
 pub struct SecurityCommand {
     #[allow(dead_code)]
@@ -17,8 +17,7 @@ pub struct SecurityCommand {
 
 impl SecurityCommand {
     pub fn new(config: Config) -> Self {
-        let api_key = config.anthropic_api_key.clone()
-            .unwrap_or_default();
+        let api_key = config.anthropic_api_key.clone().unwrap_or_default();
 
         Self {
             config,
@@ -26,10 +25,7 @@ impl SecurityCommand {
             auth_token: None,
             save_file: None,
             http_client: Client::new(),
-            ai_client: ClientBuilder::default()
-                .api_key(api_key)
-                .build()
-                .unwrap(),
+            ai_client: ClientBuilder::default().api_key(api_key).build().unwrap(),
         }
     }
 
@@ -49,57 +45,24 @@ impl SecurityCommand {
     }
 
     async fn display_security_analysis(&self, analysis: &str) {
-        let term = Term::stdout();
-        let width = term.size().1 as usize;
-        
-        println!("\n{}", style("📊 Security Analysis").bold().cyan());
-        println!("{}\n", style("═".repeat(width.min(80))).cyan());
+        renderer::render_ai_insight("Security Analysis", analysis);
 
-        // Split analysis into sections based on numbered items
-        let sections: Vec<&str> = analysis.split("\n\n").collect();
-        
-        for section in sections {
-            if section.starts_with(|c: char| c.is_ascii_digit()) {
-                // Main section headers
-                let (header, content) = section.split_once(":\n").unwrap_or((section, ""));
-                println!("{}", style(header).yellow().bold());
-                
-                // Process bullet points and sub-sections
-                for line in content.lines() {
-                    if line.trim().is_empty() { continue; }
-                    
-                    if line.starts_with("- ") {
-                        println!("  {} {}", 
-                            style("•").cyan(),
-                            style(line.strip_prefix("- ").unwrap_or(line)).white()
-                        );
-                    } else if line.starts_with("`") {
-                        // Format code/technical items
-                        println!("    {}", style(line).blue());
-                    } else {
-                        println!("  {}", style(line).white());
-                    }
-                }
-                println!(); // Add spacing between sections
-            }
-        }
-
-        // Add a summary box at the end
-        println!("{}", style("─".repeat(width.min(80))).cyan());
-        let summary = style("ℹ️  This analysis is based on the API response only. A comprehensive security audit would require additional context.").dim();
-        println!("{}\n", summary);
+        println!(
+            "\n  {}",
+            colors::muted().apply_to(
+                "This analysis is based on the API response only. A comprehensive security audit would require additional context."
+            )
+        );
+        println!();
     }
 
     pub async fn execute(&self, args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", style("🔒 Starting security scan...").bold());
-        
-        if self.deep_scan {
-            println!("{}", style("📋 Deep scan enabled - this may take a few minutes").yellow());
-        }
-
         if args.len() < 2 {
-            println!("❌ Usage: security <url>");
-            println!("Example: security api.example.com/v1/users");
+            renderer::render_error(
+                "Missing URL",
+                "security <url>",
+                "security https://api.example.com",
+            );
             return Ok(());
         }
 
@@ -109,8 +72,18 @@ impl SecurityCommand {
             format!("http://{}", args[1])
         };
 
-        println!("🔒 Running security analysis on {}", style(&url).cyan());
-        
+        println!(
+            "\n  {} {}",
+            colors::accent().apply_to("Scanning:"),
+            colors::muted().apply_to(&url),
+        );
+        if self.deep_scan {
+            println!(
+                "  {}",
+                colors::muted().apply_to("Deep scan enabled -- this may take a few minutes")
+            );
+        }
+
         let mut analysis_data = Vec::new();
 
         // Basic scan - check main endpoint
@@ -129,10 +102,14 @@ impl SecurityCommand {
 
             // Check HTTP methods
             for method in ["HEAD", "OPTIONS", "TRACE"] {
-                if let Ok(resp) = self.http_client
-                    .request(reqwest::Method::from_bytes(method.as_bytes()).unwrap(), &url)
+                if let Ok(resp) = self
+                    .http_client
+                    .request(
+                        reqwest::Method::from_bytes(method.as_bytes()).unwrap(),
+                        &url,
+                    )
                     .send()
-                    .await 
+                    .await
                 {
                     analysis_data.push(self.analyze_response(resp).await?);
                 }
@@ -167,12 +144,14 @@ impl SecurityCommand {
             )
         };
 
-        println!("🤖 Analyzing response with Claude AI...\n");
+        println!("  {}", colors::muted().apply_to("Analyzing with AI..."));
 
         // Get AI analysis
         let messages = vec![Message {
             role: Role::User,
-            content: vec![ContentBlock::Text { text: analysis_prompt }]
+            content: vec![ContentBlock::Text {
+                text: analysis_prompt,
+            }],
         }];
 
         let messages_request = MessagesRequestBuilder::default()
@@ -187,13 +166,16 @@ impl SecurityCommand {
         if let Some(ContentBlock::Text { text }) = messages_response.content.first() {
             self.display_security_analysis(text).await;
         } else {
-            println!("❌ Error: Could not parse AI response");
+            renderer::render_error("Could not parse AI response", "", "");
         }
 
         Ok(())
     }
 
-    async fn analyze_response(&self, response: reqwest::Response) -> Result<String, Box<dyn std::error::Error>> {
+    async fn analyze_response(
+        &self,
+        response: reqwest::Response,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let url = response.url().to_string();
         let status = response.status();
         let headers = response.headers().clone();
@@ -215,4 +197,4 @@ impl SecurityCommand {
             .collect::<Vec<String>>()
             .join("\n")
     }
-} 
+}

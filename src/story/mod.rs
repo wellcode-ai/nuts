@@ -1,13 +1,13 @@
-use console::style;
-use indicatif::{ProgressBar, ProgressStyle};
-use std::time::Duration;
 use crate::commands::call::CallCommand;
+use crate::flows::{MediaType, OpenAPISpec, Operation, PathItem, RequestBody, Response, Schema};
 use anthropic::{
     client::ClientBuilder,
-    types::{Message, ContentBlock, MessagesRequestBuilder, Role},
+    types::{ContentBlock, Message, MessagesRequestBuilder, Role},
 };
+use console::style;
+use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
-use crate::flows::{OpenAPISpec, PathItem, Operation, RequestBody, Response, MediaType, Schema};
+use std::time::Duration;
 use url::Url;
 
 #[allow(dead_code)]
@@ -22,9 +22,18 @@ impl StoryMode {
         Self { flow, api_key }
     }
 
-    pub async fn start(&self, editor: &mut rustyline::Editor<crate::completer::NutsCompleter, rustyline::history::DefaultHistory>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start(
+        &self,
+        editor: &mut rustyline::Editor<
+            crate::completer::NutsCompleter,
+            rustyline::history::DefaultHistory,
+        >,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n🎬 {}", style("Story Mode").cyan().bold());
-        println!("AI-guided API workflow for flow: {}", style(&self.flow).yellow());
+        println!(
+            "AI-guided API workflow for flow: {}",
+            style(&self.flow).yellow()
+        );
         println!("Type 'exit' to quit story mode\n");
 
         loop {
@@ -36,13 +45,13 @@ impl StoryMode {
                     }
 
                     let spinner = self.show_thinking_spinner();
-                    
+
                     if let Some(suggestion) = self.get_suggestion(&line).await {
                         spinner.finish_with_message("Got it! 🚀");
-                        
+
                         println!("\n📝 {}", style("Suggested workflow:").blue());
                         println!("{}", suggestion);
-                        
+
                         let execute = editor.readline("\n🚀 Execute this workflow? (y/n): ");
                         if let Ok(response) = execute {
                             if response.trim().eq_ignore_ascii_case("y") {
@@ -65,9 +74,11 @@ impl StoryMode {
     }
 
     fn show_thinking_spinner(&self) -> ProgressBar {
-        let spinner = ProgressBar::new_spinner()
-            .with_style(ProgressStyle::default_spinner()
-                .template("{spinner} Thinking...").unwrap());
+        let spinner = ProgressBar::new_spinner().with_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner} Thinking...")
+                .unwrap(),
+        );
         spinner.enable_steady_tick(Duration::from_millis(100));
         spinner
     }
@@ -98,25 +109,28 @@ impl StoryMode {
             self.flow, goal
         );
 
-        match ai_client.messages(MessagesRequestBuilder::default()
-            .messages(vec![Message {
-                role: Role::User,
-                content: vec![ContentBlock::Text { text: prompt }],
-            }])
-            .model("claude-3-sonnet-20240229".to_string())
-            .max_tokens(2000_usize)
-            .build()
-            .ok()?
-        ).await {
-            Ok(response) => response.content.first()
-                .and_then(|block| {
-                    if let ContentBlock::Text { text } = block {
-                        Some(text.clone())
-                    } else {
-                        None
-                    }
-                }),
-            Err(_) => None
+        match ai_client
+            .messages(
+                MessagesRequestBuilder::default()
+                    .messages(vec![Message {
+                        role: Role::User,
+                        content: vec![ContentBlock::Text { text: prompt }],
+                    }])
+                    .model("claude-3-sonnet-20240229".to_string())
+                    .max_tokens(2000_usize)
+                    .build()
+                    .ok()?,
+            )
+            .await
+        {
+            Ok(response) => response.content.first().and_then(|block| {
+                if let ContentBlock::Text { text } = block {
+                    Some(text.clone())
+                } else {
+                    None
+                }
+            }),
+            Err(_) => None,
         }
     }
 
@@ -126,7 +140,8 @@ impl StoryMode {
             return Ok(());
         }
 
-        let steps: Vec<&str> = flow.lines()
+        let steps: Vec<&str> = flow
+            .lines()
             .filter(|line| line.contains("curl") || line.contains("http"))
             .collect();
 
@@ -137,11 +152,11 @@ impl StoryMode {
 
         for (i, step) in steps.iter().enumerate() {
             println!("\n📍 Step {}/{}", i + 1, steps.len());
-            
+
             if let Some(url) = step.find("http") {
                 let url_end = step[url..].find(' ').unwrap_or(step.len() - url);
                 let url = &step[url..url + url_end];
-                
+
                 let method = if step.contains("POST") {
                     "POST"
                 } else if step.contains("PUT") {
@@ -159,7 +174,9 @@ impl StoryMode {
                 };
 
                 println!("Executing {} {}", style(method).cyan(), style(url).green());
-                CallCommand::new().execute(&[method, url, body.unwrap_or("")]).await?;
+                CallCommand::new()
+                    .execute(&[method, url, body.unwrap_or("")])
+                    .await?;
             }
         }
 
@@ -176,8 +193,7 @@ impl StoryMode {
         for line in flow.lines() {
             if line.starts_with(|c: char| c.is_digit(10)) {
                 // Start of new step - capture description
-                description = line.splitn(2, '.').nth(1)
-                    .unwrap_or("").trim().to_string();
+                description = line.splitn(2, '.').nth(1).unwrap_or("").trim().to_string();
             } else if line.contains("http") {
                 // Parse method and path
                 let parts: Vec<&str> = line.split_whitespace().collect();
@@ -191,7 +207,7 @@ impl StoryMode {
                 // Found request body - create operation
                 let path = current_path.take().unwrap();
                 let method = current_method.take().unwrap();
-                
+
                 let path_item = paths.entry(path).or_insert(PathItem::new());
                 let operation = Operation {
                     summary: Some(description.clone()),
@@ -205,25 +221,31 @@ impl StoryMode {
                             required: Some(true),
                             content: {
                                 let mut content = HashMap::new();
-                                content.insert("application/json".to_string(), MediaType {
-                                    schema: Schema {
-                                        schema_type: "object".to_string(),
-                                        format: None,
-                                        properties: None,
-                                        items: None,
+                                content.insert(
+                                    "application/json".to_string(),
+                                    MediaType {
+                                        schema: Schema {
+                                            schema_type: "object".to_string(),
+                                            format: None,
+                                            properties: None,
+                                            items: None,
+                                        },
+                                        example: serde_json::from_str(line).ok(),
                                     },
-                                    example: serde_json::from_str(line).ok(),
-                                });
+                                );
                                 content
                             },
                         })
                     },
                     responses: {
                         let mut responses = HashMap::new();
-                        responses.insert("200".to_string(), Response {
-                            description: "Successful response".to_string(),
-                            content: None,
-                        });
+                        responses.insert(
+                            "200".to_string(),
+                            Response {
+                                description: "Successful response".to_string(),
+                                content: None,
+                            },
+                        );
                         responses
                     },
                     ..Default::default()
@@ -254,4 +276,4 @@ impl StoryMode {
         println!("\n✅ Saved API flow to flow {}", style(&self.flow).green());
         Ok(())
     }
-} 
+}

@@ -1,8 +1,8 @@
+use crate::config::Config;
 use anthropic::{
     client::ClientBuilder,
-    types::{Message, ContentBlock, MessagesRequestBuilder, Role},
+    types::{ContentBlock, Message, MessagesRequestBuilder, Role},
 };
-use crate::config::Config;
 
 pub struct ExplainCommand {
     config: Config,
@@ -14,18 +14,23 @@ impl ExplainCommand {
     }
 
     /// AI explains the last API response in human terms
-    pub async fn explain_response(&self, response: &str, context: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn explain_response(
+        &self,
+        response: &str,
+        context: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         println!("🧠 AI explaining your API response...");
-        
-        let api_key = self.config.anthropic_api_key.as_ref()
+
+        let api_key = self
+            .config
+            .anthropic_api_key
+            .as_ref()
             .ok_or("API key not configured. Use 'config api-key' to set it")?;
 
-        let ai_client = ClientBuilder::default()
-            .api_key(api_key.clone())
-            .build()?;
+        let ai_client = ClientBuilder::default().api_key(api_key.clone()).build()?;
 
         let context_info = context.unwrap_or("No additional context provided");
-        
+
         let prompt = format!(
             "You are an expert API response interpreter. Explain this API response in human-friendly terms:\n\n\
             Context: {}\n\n\
@@ -41,15 +46,18 @@ impl ExplainCommand {
             context_info, response
         );
 
-        let ai_response = ai_client.messages(MessagesRequestBuilder::default()
-            .messages(vec![Message {
-                role: Role::User,
-                content: vec![ContentBlock::Text { text: prompt }],
-            }])
-            .model("claude-3-sonnet-20240229".to_string())
-            .max_tokens(1500_usize)
-            .build()?
-        ).await?;
+        let ai_response = ai_client
+            .messages(
+                MessagesRequestBuilder::default()
+                    .messages(vec![Message {
+                        role: Role::User,
+                        content: vec![ContentBlock::Text { text: prompt }],
+                    }])
+                    .model("claude-3-sonnet-20240229".to_string())
+                    .max_tokens(1500_usize)
+                    .build()?,
+            )
+            .await?;
 
         if let Some(ContentBlock::Text { text }) = ai_response.content.first() {
             println!("\n📖 AI Explanation:");
@@ -61,15 +69,20 @@ impl ExplainCommand {
 
     /// Explain API errors with helpful solutions
     #[allow(dead_code)]
-    pub async fn explain_error(&self, error: &str, endpoint: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn explain_error(
+        &self,
+        error: &str,
+        endpoint: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         println!("🚨 AI analyzing error...");
-        
-        let api_key = self.config.anthropic_api_key.as_ref()
+
+        let api_key = self
+            .config
+            .anthropic_api_key
+            .as_ref()
             .ok_or("API key not configured. Use 'config api-key' to set it")?;
 
-        let ai_client = ClientBuilder::default()
-            .api_key(api_key.clone())
-            .build()?;
+        let ai_client = ClientBuilder::default().api_key(api_key.clone()).build()?;
 
         let prompt = format!(
             "You are an expert API troubleshooter. Help debug this API error:\n\n\
@@ -86,15 +99,18 @@ impl ExplainCommand {
             endpoint, error
         );
 
-        let ai_response = ai_client.messages(MessagesRequestBuilder::default()
-            .messages(vec![Message {
-                role: Role::User,
-                content: vec![ContentBlock::Text { text: prompt }],
-            }])
-            .model("claude-3-sonnet-20240229".to_string())
-            .max_tokens(1500_usize)
-            .build()?
-        ).await?;
+        let ai_response = ai_client
+            .messages(
+                MessagesRequestBuilder::default()
+                    .messages(vec![Message {
+                        role: Role::User,
+                        content: vec![ContentBlock::Text { text: prompt }],
+                    }])
+                    .model("claude-3-sonnet-20240229".to_string())
+                    .max_tokens(1500_usize)
+                    .build()?,
+            )
+            .await?;
 
         if let Some(ContentBlock::Text { text }) = ai_response.content.first() {
             println!("\n🔧 AI Troubleshooting:");
@@ -106,15 +122,20 @@ impl ExplainCommand {
 
     /// Explain HTTP status codes with context
     #[allow(dead_code)]
-    pub async fn explain_status_code(&self, status_code: u16, context: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn explain_status_code(
+        &self,
+        status_code: u16,
+        context: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         println!("📊 AI explaining status code {}...", status_code);
-        
-        let api_key = self.config.anthropic_api_key.as_ref()
+
+        let api_key = self
+            .config
+            .anthropic_api_key
+            .as_ref()
             .ok_or("API key not configured. Use 'config api-key' to set it")?;
 
-        let ai_client = ClientBuilder::default()
-            .api_key(api_key.clone())
-            .build()?;
+        let ai_client = ClientBuilder::default().api_key(api_key.clone()).build()?;
 
         let prompt = format!(
             "Explain HTTP status code {} in the context of this API interaction:\n\n\
@@ -130,15 +151,18 @@ impl ExplainCommand {
             status_code, status_code, context
         );
 
-        let ai_response = ai_client.messages(MessagesRequestBuilder::default()
-            .messages(vec![Message {
-                role: Role::User,
-                content: vec![ContentBlock::Text { text: prompt }],
-            }])
-            .model("claude-3-sonnet-20240229".to_string())
-            .max_tokens(800_usize)
-            .build()?
-        ).await?;
+        let ai_response = ai_client
+            .messages(
+                MessagesRequestBuilder::default()
+                    .messages(vec![Message {
+                        role: Role::User,
+                        content: vec![ContentBlock::Text { text: prompt }],
+                    }])
+                    .model("claude-3-sonnet-20240229".to_string())
+                    .max_tokens(800_usize)
+                    .build()?,
+            )
+            .await?;
 
         if let Some(ContentBlock::Text { text }) = ai_response.content.first() {
             println!("\n📚 Status Code Explanation:");

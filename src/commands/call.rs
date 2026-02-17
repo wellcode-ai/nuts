@@ -1,12 +1,12 @@
-use console::style;
+use crate::commands::CommandResult;
+use crate::models::analysis::{ApiAnalysis, CacheAnalysis};
+use crate::output::{colors, renderer};
 use reqwest::{header, Client, Method};
 use serde_json::Value;
-use std::error::Error;
-use std::time::{Duration, Instant};
 use std::collections::HashMap;
+use std::error::Error;
 use std::fs;
-use crate::models::analysis::{ApiAnalysis, CacheAnalysis};
-use crate::commands::CommandResult;
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 pub struct CallOptions {
@@ -70,7 +70,7 @@ impl CallCommand {
 
     pub async fn execute_with_options(&self, options: CallOptions) -> CommandResult {
         if options.verbose {
-            println!("🔍 Verbose mode enabled");
+            println!("  {}", colors::muted().apply_to("Verbose mode enabled"));
             self.print_request_info(&options);
         }
 
@@ -80,9 +80,14 @@ impl CallCommand {
 
         loop {
             attempts += 1;
-            
+
             if options.verbose && attempts > 1 {
-                println!("🔄 Retry attempt {} of {}", attempts, max_attempts);
+                println!(
+                    "  {} {}/{}",
+                    colors::muted().apply_to("Retry attempt"),
+                    attempts,
+                    max_attempts
+                );
             }
 
             match self.make_request(&options).await {
@@ -93,8 +98,12 @@ impl CallCommand {
                 }
                 Err(e) if attempts < max_attempts => {
                     if options.verbose {
-                        println!("❌ Attempt {} failed: {}", attempts, e);
-                        println!("⏳ Waiting before retry...");
+                        println!(
+                            "  {} {}",
+                            colors::error().apply_to(format!("Attempt {} failed:", attempts)),
+                            e
+                        );
+                        println!("  {}", colors::muted().apply_to("Waiting before retry..."));
                     }
                     tokio::time::sleep(Duration::from_millis(1000 * attempts as u64)).await;
                     continue;
@@ -107,29 +116,44 @@ impl CallCommand {
     }
 
     fn print_request_info(&self, options: &CallOptions) {
-        println!("🌐 {} {}", style(&options.method).cyan(), style(&options.url).cyan());
-        
+        println!(
+            "\n  {} {}",
+            colors::accent().apply_to(&options.method),
+            colors::muted().apply_to(&options.url),
+        );
+
         if !options.headers.is_empty() {
-            println!("📋 Request Headers:");
-            for (key, value) in &options.headers {
-                println!("  {}: {}", style(key).dim(), value);
-            }
+            let header_pairs: Vec<(String, String)> = options
+                .headers
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            renderer::render_headers(&header_pairs);
         }
 
         if let Some(body) = &options.body {
-            println!("📝 Request Body:");
-            println!("{}", style(body).blue());
+            println!("  {}", colors::muted().apply_to("Request Body:"));
+            if let Ok(json) = serde_json::from_str::<Value>(body) {
+                renderer::render_json_body(&json);
+            } else {
+                println!("  {}", body);
+            }
         }
 
         if !options.form_data.is_empty() {
-            println!("📊 Form Data:");
-            for (key, value) in &options.form_data {
-                println!("  {}: {}", style(key).dim(), value);
-            }
+            let form_pairs: Vec<(String, String)> = options
+                .form_data
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            renderer::render_headers(&form_pairs);
         }
     }
 
-    async fn make_request(&self, options: &CallOptions) -> Result<reqwest::Response, Box<dyn Error>> {
+    async fn make_request(
+        &self,
+        options: &CallOptions,
+    ) -> Result<reqwest::Response, Box<dyn Error>> {
         let mut client_builder = Client::builder();
 
         // Configure client based on options
@@ -183,44 +207,44 @@ impl CallCommand {
         Ok(request.send().await?)
     }
 
-    async fn handle_response(&self, response: reqwest::Response, options: &CallOptions, elapsed: Duration) -> CommandResult {
-        let status = response.status();
+    async fn handle_response(
+        &self,
+        response: reqwest::Response,
+        options: &CallOptions,
+        elapsed: Duration,
+    ) -> CommandResult {
+        let status = response.status().as_u16();
         let headers = response.headers().clone();
-        
-        println!("📡 Status: {} ({}ms)", 
-            style(status).yellow(), 
-            style(elapsed.as_millis()).dim()
-        );
-
-        if options.include_headers || options.verbose {
-            println!("\n📋 Response Headers:");
-            for (key, value) in &headers {
-                println!("  {}: {}", style(key).dim(), value.to_str().unwrap_or(""));
-            }
-        }
 
         // Get response body
         let text = response.text().await?;
 
+        // Status line: "200 OK  143ms  2.4 KB"
+        renderer::render_status_line(status, elapsed, text.len());
+
+        if options.include_headers || options.verbose {
+            let header_pairs: Vec<(String, String)> = headers
+                .iter()
+                .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+                .collect();
+            renderer::render_headers(&header_pairs);
+        }
+
         // Save to file if specified
         if let Some(output_file) = &options.output_file {
             fs::write(output_file, &text)?;
-            println!("💾 Response saved to: {}", style(output_file).green());
+            println!(
+                "  {} {}",
+                colors::success().apply_to("Saved to:"),
+                output_file
+            );
         } else {
-            // Print response
-            println!("\n📦 Response:");
+            // Print response body with syntax highlighting
             if let Ok(json) = serde_json::from_str::<Value>(&text) {
-                println!("{}", style(serde_json::to_string_pretty(&json)?).green());
+                renderer::render_json_body(&json);
             } else {
-                println!("{}", style(text.trim()).green());
+                println!("{}", text.trim());
             }
-        }
-
-        // Performance metrics
-        if options.verbose {
-            println!("\n⚡ Performance:");
-            println!("  Response time: {}ms", elapsed.as_millis());
-            println!("  Response size: {} bytes", text.len());
         }
 
         Ok(())
@@ -244,13 +268,15 @@ impl CallCommand {
                     }
                     let header = args[i + 1];
                     if let Some((key, value)) = header.split_once(':') {
-                        options.headers.insert(key.trim().to_string(), value.trim().to_string());
+                        options
+                            .headers
+                            .insert(key.trim().to_string(), value.trim().to_string());
                     } else {
                         return Err("Header must be in format 'Key: Value'".into());
                     }
                     i += 2;
                 }
-                
+
                 // Authentication
                 "-u" | "--user" => {
                     if i + 1 >= args.len() {
@@ -338,8 +364,8 @@ impl CallCommand {
                     if i + 1 >= args.len() {
                         return Err("Timeout value required after --timeout".into());
                     }
-                    let timeout_secs: u64 = args[i + 1].parse()
-                        .map_err(|_| "Invalid timeout value")?;
+                    let timeout_secs: u64 =
+                        args[i + 1].parse().map_err(|_| "Invalid timeout value")?;
                     options.timeout = Some(Duration::from_secs(timeout_secs));
                     i += 2;
                 }
@@ -348,8 +374,7 @@ impl CallCommand {
                     if i + 1 >= args.len() {
                         return Err("Retry count required after --retry".into());
                     }
-                    options.max_retries = args[i + 1].parse()
-                        .map_err(|_| "Invalid retry count")?;
+                    options.max_retries = args[i + 1].parse().map_err(|_| "Invalid retry count")?;
                     i += 2;
                 }
 
@@ -411,33 +436,13 @@ impl CallCommand {
         Ok(options)
     }
 
-    #[allow(dead_code)]
-    async fn print_response(&self, response: reqwest::Response) -> CommandResult {
-        println!("📡 Status: {}", style(response.status()).yellow());
-        
-        // Print headers
-        println!("\n📋 Headers:");
-        for (key, value) in response.headers() {
-            println!("  {}: {}", style(key).dim(), value.to_str().unwrap_or(""));
-        }
-        
-        // Print response body
-        let text = response.text().await?;
-        println!("\n📦 Response:");
-        
-        if let Ok(json) = serde_json::from_str::<Value>(&text) {
-            println!("{}", style(serde_json::to_string_pretty(&json)?).green());
-        } else {
-            println!("{}", style(text.trim()).green());
-        }
-
-        Ok(())
-    }
-
-    pub async fn execute_with_response(&self, args: &[&str]) -> Result<String, Box<dyn std::error::Error>> {
+    pub async fn execute_with_response(
+        &self,
+        args: &[&str],
+    ) -> Result<String, Box<dyn std::error::Error>> {
         // Parse arguments
         let (method, url, body) = self.parse_args(args)?;
-        
+
         // Add http:// if not present
         let full_url = if !url.starts_with("http") {
             format!("http://{}", url)
@@ -445,68 +450,72 @@ impl CallCommand {
             url.to_string()
         };
 
-        println!("🌐 {} {}", style(&method).cyan(), style(&full_url).cyan());
+        println!(
+            "\n  {} {}",
+            colors::accent().apply_to(&method),
+            colors::muted().apply_to(&full_url),
+        );
 
         // Build the request
-        let mut request = self.client.request(
-            method.parse()?,
-            &full_url
-        );
+        let mut request = self.client.request(method.parse()?, &full_url);
 
         // Add JSON body if provided
         if let Some(json_body) = body {
-            println!("📝 Request Body:");
-            println!("{}", style(&json_body).blue());
-            request = request.header(header::CONTENT_TYPE, "application/json")
-                           .body(json_body.to_string());
+            println!("  {}", colors::muted().apply_to("Request Body:"));
+            renderer::render_json_body(&json_body);
+            request = request
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(json_body.to_string());
         }
 
         // Send request
+        let start = Instant::now();
         let response = request.send().await?;
-        
-        // Print status code
-        println!("📡 Status: {}", style(response.status()).yellow());
-        
-        // Print headers
-        println!("\n📋 Headers:");
-        for (key, value) in response.headers() {
-            println!("  {}: {}", style(key).dim(), value.to_str().unwrap_or(""));
-        }
-        
+        let elapsed = start.elapsed();
+
+        let status = response.status().as_u16();
+
         // Store headers before consuming response
         let headers = response.headers().clone();
-        
+
         // Print response body
         let text = response.text().await?;
-        println!("\n📦 Response:");
-        // Try to pretty print if it's JSON
-        match serde_json::from_str::<Value>(&text) {
-            Ok(json) => {
-                println!("{}", style(serde_json::to_string_pretty(&json)?).green());
-            },
-            Err(_) => {
-                // If it's not JSON, just print as plain text
-                println!("{}", style(text.trim()).green());
-            }
+
+        renderer::render_status_line(status, elapsed, text.len());
+
+        let header_pairs: Vec<(String, String)> = headers
+            .iter()
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
+        renderer::render_headers(&header_pairs);
+
+        if let Ok(json) = serde_json::from_str::<Value>(&text) {
+            renderer::render_json_body(&json);
+        } else {
+            println!("{}", text.trim());
         }
 
         if args.contains(&"--analyze") {
             let _ = self.handle_analyze(&headers, &text).await?;
         }
 
-        Ok(text)  // Return the response body
+        Ok(text) // Return the response body
     }
 
-    fn parse_args<'a>(&self, args: &[&'a str]) -> Result<(String, &'a str, Option<Value>), Box<dyn Error>> {
+    fn parse_args<'a>(
+        &self,
+        args: &[&'a str],
+    ) -> Result<(String, &'a str, Option<Value>), Box<dyn Error>> {
         if args.len() < 2 {
             return Err("Usage: call [METHOD] URL [JSON_BODY]".into());
         }
 
-        let (method, url, body_start) = if args[1].eq_ignore_ascii_case("get") 
+        let (method, url, body_start) = if args[1].eq_ignore_ascii_case("get")
             || args[1].eq_ignore_ascii_case("post")
             || args[1].eq_ignore_ascii_case("put")
             || args[1].eq_ignore_ascii_case("delete")
-            || args[1].eq_ignore_ascii_case("patch") {
+            || args[1].eq_ignore_ascii_case("patch")
+        {
             // Method specified
             (args[1].to_uppercase(), args[2], 3)
         } else {
@@ -529,35 +538,51 @@ impl CallCommand {
 
         Ok((method, url, body))
     }
-    async fn handle_analyze(&self, headers: &header::HeaderMap, body: &str) -> Result<ApiAnalysis, Box<dyn Error>> {
+    async fn handle_analyze(
+        &self,
+        headers: &header::HeaderMap,
+        body: &str,
+    ) -> Result<ApiAnalysis, Box<dyn Error>> {
         let analysis = ApiAnalysis {
             auth_type: self.detect_auth_type(headers),
             rate_limit: self.detect_rate_limit(headers),
             cache_status: self.analyze_cache(headers),
             recommendations: self.generate_recommendations(headers, body).await,
         };
-    
-        println!("\n🤖 Analyzing API patterns...");
+
+        println!(
+            "\n  {}",
+            colors::accent().apply_to("Analyzing API patterns...")
+        );
         if let Some(auth) = &analysis.auth_type {
-            println!("✓ Authentication: {}", auth);
+            println!(
+                "  {} Authentication: {}",
+                colors::success().apply_to("+"),
+                auth
+            );
         }
         if let Some(rate) = analysis.rate_limit {
-            println!("✓ Rate limiting: {} req/min", rate);
+            println!(
+                "  {} Rate limiting: {} req/min",
+                colors::success().apply_to("+"),
+                rate
+            );
         }
         if analysis.cache_status.cacheable {
-            println!("✓ Caching opportunity identified");
+            println!(
+                "  {} Caching opportunity identified",
+                colors::success().apply_to("+")
+            );
         }
-        
+
         if !analysis.recommendations.is_empty() {
-            println!("\n📝 Recommendations:");
-            for rec in &analysis.recommendations {
-                println!("• {}", rec);
-            }
+            let recs = analysis.recommendations.join("\n  - ");
+            renderer::render_section("Recommendations", &format!("  - {}", recs));
         }
-    
+
         Ok(analysis)
     }
-    
+
     fn detect_auth_type(&self, headers: &reqwest::header::HeaderMap) -> Option<String> {
         if headers.contains_key("www-authenticate") {
             Some("Basic".to_string())
@@ -573,35 +598,41 @@ impl CallCommand {
             None
         }
     }
-    
+
     fn detect_rate_limit(&self, headers: &reqwest::header::HeaderMap) -> Option<u32> {
         // Check multiple common rate limit headers
-        headers.get("x-ratelimit-limit")
+        headers
+            .get("x-ratelimit-limit")
             .or(headers.get("ratelimit-limit"))
             .or(headers.get("x-rate-limit"))
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.parse().ok())
     }
-    
+
     fn analyze_cache(&self, headers: &reqwest::header::HeaderMap) -> CacheAnalysis {
         let cache_control = headers
             .get("cache-control")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-        
+
         let etag = headers.contains_key("etag");
         let last_modified = headers.contains_key("last-modified");
-        
+
         let mut reason = Vec::new();
-        if etag { reason.push("ETag header present"); }
-        if last_modified { reason.push("Last-Modified header present"); }
-        if !cache_control.is_empty() { reason.push("Cache-Control directive found"); }
-        
+        if etag {
+            reason.push("ETag header present");
+        }
+        if last_modified {
+            reason.push("Last-Modified header present");
+        }
+        if !cache_control.is_empty() {
+            reason.push("Cache-Control directive found");
+        }
+
         CacheAnalysis {
-            cacheable: (!cache_control.contains("no-cache") 
-                       && !cache_control.contains("private"))
-                       || etag 
-                       || last_modified,
+            cacheable: (!cache_control.contains("no-cache") && !cache_control.contains("private"))
+                || etag
+                || last_modified,
             suggested_ttl: if cache_control.contains("max-age=") {
                 cache_control
                     .split("max-age=")
@@ -615,26 +646,30 @@ impl CallCommand {
         }
     }
 
-    async fn generate_recommendations(&self, headers: &reqwest::header::HeaderMap, body: &str) -> Vec<String> {
+    async fn generate_recommendations(
+        &self,
+        headers: &reqwest::header::HeaderMap,
+        body: &str,
+    ) -> Vec<String> {
         let mut recommendations = self.generate_basic_recommendations(headers);
-        
+
         // Add AI recommendations
         if let Ok(ai_recommendations) = self.get_ai_recommendations(headers, body).await {
             recommendations.extend(ai_recommendations);
         }
-        
+
         recommendations
     }
 
     // Rename existing recommendations to basic
     fn generate_basic_recommendations(&self, headers: &reqwest::header::HeaderMap) -> Vec<String> {
         let mut recommendations = Vec::new();
-        
+
         // Rate limiting recommendations
         if headers.get("x-ratelimit-limit").is_none() {
             recommendations.push("Consider implementing rate limiting".to_string());
         }
-        
+
         // Security recommendations
         if !headers.contains_key("x-content-type-options") {
             recommendations.push("Add X-Content-Type-Options: nosniff header".to_string());
@@ -642,31 +677,39 @@ impl CallCommand {
         if !headers.contains_key("x-frame-options") {
             recommendations.push("Consider adding X-Frame-Options header".to_string());
         }
-        
+
         // Cache recommendations
         if !headers.contains_key("cache-control") {
             recommendations.push("Add explicit Cache-Control directives".to_string());
         }
-        
+
         // CORS recommendations
-        if headers.get("access-control-allow-origin")
-                     .and_then(|v| v.to_str().ok())
-                     .map_or(false, |v| v == "*") {
-            recommendations.push("Consider restricting CORS Access-Control-Allow-Origin".to_string());
+        if headers
+            .get("access-control-allow-origin")
+            .and_then(|v| v.to_str().ok())
+            .map_or(false, |v| v == "*")
+        {
+            recommendations
+                .push("Consider restricting CORS Access-Control-Allow-Origin".to_string());
         }
-        
+
         recommendations
     }
 
-    async fn get_ai_recommendations(&self, headers: &reqwest::header::HeaderMap, body: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    async fn get_ai_recommendations(
+        &self,
+        headers: &reqwest::header::HeaderMap,
+        body: &str,
+    ) -> Result<Vec<String>, Box<dyn Error>> {
         let prompt = format!(
             "Analyze this API response and provide specific recommendations for improvement. \
-            Headers: {:?}\nBody preview: {}", 
+            Headers: {:?}\nBody preview: {}",
             headers,
             &body[..body.len().min(500)] // First 500 chars of body
         );
 
-        let response = self.client
+        let response = self
+            .client
             .post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", std::env::var("ANTHROPIC_API_KEY")?)
             .header("anthropic-version", "2023-06-01")

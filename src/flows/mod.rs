@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::collections::HashMap;
 use std::fs;
+use std::path::PathBuf;
 
 pub mod manager;
 pub use manager::CollectionManager;
@@ -160,12 +160,21 @@ impl PathItem {
 
     #[allow(dead_code)]
     pub fn get_operation(&self) -> Option<(&'static str, &Operation)> {
-        if let Some(op) = &self.get { return Some(("GET", op)) }
-        if let Some(op) = &self.post { return Some(("POST", op)) }
-        if let Some(op) = &self.put { return Some(("PUT", op)) }
-        if let Some(op) = &self.delete { return Some(("DELETE", op)) }
-        if let Some(op) = &self.patch { return Some(("PATCH", op)) }
+        if let Some(op) = &self.get {
+            return Some(("GET", op));
+        }
+        if let Some(op) = &self.post {
+            return Some(("POST", op));
+        }
+        if let Some(op) = &self.put {
+            return Some(("PUT", op));
+        }
+        if let Some(op) = &self.delete {
+            return Some(("DELETE", op));
+        }
+        if let Some(op) = &self.patch {
+            return Some(("PATCH", op));
+        }
         None
     }
 }
-

@@ -1,13 +1,13 @@
-use std::collections::HashMap;
-use std::time::{Duration, SystemTime};
-use anthropic::{
-    client::ClientBuilder,
-    types::{Message, ContentBlock, MessagesRequestBuilder, Role},
-};
-use serde_json::json;
-use crate::config::Config;
 use crate::commands::call::CallCommand;
 use crate::commands::perf::PerfCommand;
+use crate::config::Config;
+use anthropic::{
+    client::ClientBuilder,
+    types::{ContentBlock, Message, MessagesRequestBuilder, Role},
+};
+use serde_json::json;
+use std::collections::HashMap;
+use std::time::{Duration, SystemTime};
 
 pub struct PredictCommand {
     config: Config,
@@ -35,39 +35,49 @@ impl PredictCommand {
     }
 
     /// Predictive API Health Analysis
-    pub async fn predict_health(&self, base_url: &str) -> Result<PredictionResult, Box<dyn std::error::Error>> {
+    pub async fn predict_health(
+        &self,
+        base_url: &str,
+    ) -> Result<PredictionResult, Box<dyn std::error::Error>> {
         println!("🔮 Performing predictive analysis for: {}", base_url);
-        
+
         // Step 1: Collect current API metrics
         println!("📊 Collecting baseline metrics...");
         let baseline_metrics = self.collect_baseline_metrics(base_url).await?;
-        
+
         // Step 2: Run mini performance test
         println!("⚡ Running quick performance probe...");
         let performance_data = self.probe_performance(base_url).await?;
-        
+
         // Step 3: Analyze security headers and configuration
         println!("🔒 Analyzing security posture...");
         let security_analysis = self.analyze_security_posture(base_url).await?;
-        
+
         // Step 4: AI-powered predictive analysis
         println!("🤖 Generating AI predictions...");
-        let prediction = self.generate_ai_predictions(&baseline_metrics, &performance_data, &security_analysis).await?;
-        
+        let prediction = self
+            .generate_ai_predictions(&baseline_metrics, &performance_data, &security_analysis)
+            .await?;
+
         // Step 5: Present actionable insights
         self.present_predictions(&prediction)?;
-        
+
         Ok(prediction)
     }
 
-    async fn collect_baseline_metrics(&self, base_url: &str) -> Result<BaselineMetrics, Box<dyn std::error::Error>> {
+    async fn collect_baseline_metrics(
+        &self,
+        base_url: &str,
+    ) -> Result<BaselineMetrics, Box<dyn std::error::Error>> {
         let call_command = CallCommand::new();
-        
+
         // Test basic connectivity
         let start_time = SystemTime::now();
-        let response = call_command.execute_with_response(&["GET", base_url]).await?;
+        let response = call_command
+            .execute_with_response(&["GET", base_url])
+            .await?;
         let response_time = start_time.elapsed()?;
-        
+
         // Extract metrics from response
         let mut metrics = BaselineMetrics {
             response_time,
@@ -76,19 +86,22 @@ impl PredictCommand {
             server_info: None,
             headers: HashMap::new(),
         };
-        
+
         // Parse response for server information (simplified)
         if response.contains("Server:") {
             metrics.server_info = Some("Detected".to_string());
         }
-        
+
         Ok(metrics)
     }
 
-    async fn probe_performance(&self, _base_url: &str) -> Result<PerformanceData, Box<dyn std::error::Error>> {
+    async fn probe_performance(
+        &self,
+        _base_url: &str,
+    ) -> Result<PerformanceData, Box<dyn std::error::Error>> {
         // Run a quick mini load test
         let _perf_command = PerfCommand::new(&self.config);
-        
+
         // This would integrate with the existing perf command
         // For now, simulate some performance data
         let performance_data = PerformanceData {
@@ -98,40 +111,45 @@ impl PredictCommand {
             error_rate: 0.02,
             concurrent_users_tested: 10,
         };
-        
+
         Ok(performance_data)
     }
 
-    async fn analyze_security_posture(&self, base_url: &str) -> Result<SecurityAnalysis, Box<dyn std::error::Error>> {
+    async fn analyze_security_posture(
+        &self,
+        base_url: &str,
+    ) -> Result<SecurityAnalysis, Box<dyn std::error::Error>> {
         let call_command = CallCommand::new();
-        let response = call_command.execute_with_response(&["GET", base_url]).await?;
-        
+        let response = call_command
+            .execute_with_response(&["GET", base_url])
+            .await?;
+
         let mut security_analysis = SecurityAnalysis {
             https_enabled: base_url.starts_with("https://"),
             security_headers: Vec::new(),
             vulnerabilities: Vec::new(),
             compliance_score: 0.0,
         };
-        
+
         // Analyze common security headers (simplified)
         let security_headers = vec![
             "Strict-Transport-Security",
-            "Content-Security-Policy", 
+            "Content-Security-Policy",
             "X-Frame-Options",
             "X-Content-Type-Options",
             "X-XSS-Protection",
         ];
-        
+
         for header in security_headers {
             if response.contains(header) {
                 security_analysis.security_headers.push(header.to_string());
             }
         }
-        
+
         // Calculate compliance score
-        security_analysis.compliance_score = 
+        security_analysis.compliance_score =
             (security_analysis.security_headers.len() as f64 / 5.0) * 100.0;
-        
+
         Ok(security_analysis)
     }
 
@@ -141,12 +159,13 @@ impl PredictCommand {
         performance: &PerformanceData,
         security: &SecurityAnalysis,
     ) -> Result<PredictionResult, Box<dyn std::error::Error>> {
-        let api_key = self.config.anthropic_api_key.as_ref()
+        let api_key = self
+            .config
+            .anthropic_api_key
+            .as_ref()
             .ok_or("API key not configured for AI predictions")?;
 
-        let ai_client = ClientBuilder::default()
-            .api_key(api_key.clone())
-            .build()?;
+        let ai_client = ClientBuilder::default().api_key(api_key.clone()).build()?;
 
         let analysis_data = json!({
             "baseline_metrics": {
@@ -205,66 +224,84 @@ Format as JSON with these sections:
             serde_json::to_string_pretty(&analysis_data)?
         );
 
-        let response = ai_client.messages(MessagesRequestBuilder::default()
-            .messages(vec![Message {
-                role: Role::User,
-                content: vec![ContentBlock::Text { text: prompt }],
-            }])
-            .model("claude-3-sonnet-20240229".to_string())
-            .max_tokens(2000_usize)
-            .build()?
-        ).await?;
+        let response = ai_client
+            .messages(
+                MessagesRequestBuilder::default()
+                    .messages(vec![Message {
+                        role: Role::User,
+                        content: vec![ContentBlock::Text { text: prompt }],
+                    }])
+                    .model("claude-3-sonnet-20240229".to_string())
+                    .max_tokens(2000_usize)
+                    .build()?,
+            )
+            .await?;
 
         if let Some(ContentBlock::Text { text }) = response.content.first() {
             // Try to parse AI response as JSON
             if let Ok(ai_prediction) = serde_json::from_str::<serde_json::Value>(text) {
                 let prediction = PredictionResult {
-                    health_score: ai_prediction.get("health_score")
+                    health_score: ai_prediction
+                        .get("health_score")
                         .and_then(|v| v.as_f64())
                         .unwrap_or(75.0),
-                    predicted_issues: ai_prediction.get("predicted_issues")
+                    predicted_issues: ai_prediction
+                        .get("predicted_issues")
                         .and_then(|v| v.as_array())
-                        .map(|arr| arr.iter()
-                            .filter_map(|v| v.as_str())
-                            .map(|s| s.to_string())
-                            .collect())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str())
+                                .map(|s| s.to_string())
+                                .collect()
+                        })
                         .unwrap_or_default(),
-                    recommendations: ai_prediction.get("recommendations")
+                    recommendations: ai_prediction
+                        .get("recommendations")
                         .and_then(|v| v.as_array())
-                        .map(|arr| arr.iter()
-                            .filter_map(|v| v.as_str())
-                            .map(|s| s.to_string())
-                            .collect())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str())
+                                .map(|s| s.to_string())
+                                .collect()
+                        })
                         .unwrap_or_default(),
                     performance_forecast: PerformanceForecast {
                         expected_response_time: Duration::from_millis(
-                            ai_prediction.get("performance_forecast")
+                            ai_prediction
+                                .get("performance_forecast")
                                 .and_then(|pf| pf.get("expected_response_time_ms"))
                                 .and_then(|v| v.as_u64())
-                                .unwrap_or(200)
+                                .unwrap_or(200),
                         ),
-                        capacity_limit: ai_prediction.get("performance_forecast")
+                        capacity_limit: ai_prediction
+                            .get("performance_forecast")
                             .and_then(|pf| pf.get("capacity_limit_rps"))
                             .and_then(|v| v.as_u64())
                             .unwrap_or(500) as u32,
-                        bottlenecks: ai_prediction.get("performance_forecast")
+                        bottlenecks: ai_prediction
+                            .get("performance_forecast")
                             .and_then(|pf| pf.get("bottlenecks"))
                             .and_then(|v| v.as_array())
-                            .map(|arr| arr.iter()
-                                .filter_map(|v| v.as_str())
-                                .map(|s| s.to_string())
-                                .collect())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str())
+                                    .map(|s| s.to_string())
+                                    .collect()
+                            })
                             .unwrap_or_default(),
                     },
-                    security_alerts: ai_prediction.get("security_alerts")
+                    security_alerts: ai_prediction
+                        .get("security_alerts")
                         .and_then(|v| v.as_array())
-                        .map(|arr| arr.iter()
-                            .filter_map(|v| v.as_str())
-                            .map(|s| s.to_string())
-                            .collect())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str())
+                                .map(|s| s.to_string())
+                                .collect()
+                        })
                         .unwrap_or_default(),
                 };
-                
+
                 return Ok(prediction);
             }
         }
@@ -283,20 +320,26 @@ Format as JSON with these sections:
         })
     }
 
-    fn present_predictions(&self, prediction: &PredictionResult) -> Result<(), Box<dyn std::error::Error>> {
+    fn present_predictions(
+        &self,
+        prediction: &PredictionResult,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n🔮 PREDICTIVE ANALYSIS RESULTS");
         println!("═══════════════════════════════");
-        
+
         // Health Score with color coding
         let health_emoji = match prediction.health_score as u8 {
             90..=100 => "💚",
-            70..=89 => "💛", 
+            70..=89 => "💛",
             50..=69 => "🧡",
             _ => "❤️",
         };
-        
-        println!("{} Health Score: {:.1}%", health_emoji, prediction.health_score);
-        
+
+        println!(
+            "{} Health Score: {:.1}%",
+            health_emoji, prediction.health_score
+        );
+
         // Predicted Issues
         if !prediction.predicted_issues.is_empty() {
             println!("\n⚠️  PREDICTED ISSUES:");
@@ -304,15 +347,27 @@ Format as JSON with these sections:
                 println!("   • {}", issue);
             }
         }
-        
+
         // Performance Forecast
         println!("\n📈 PERFORMANCE FORECAST:");
-        println!("   Expected Response Time: {}ms", prediction.performance_forecast.expected_response_time.as_millis());
-        println!("   Estimated Capacity: {} req/s", prediction.performance_forecast.capacity_limit);
+        println!(
+            "   Expected Response Time: {}ms",
+            prediction
+                .performance_forecast
+                .expected_response_time
+                .as_millis()
+        );
+        println!(
+            "   Estimated Capacity: {} req/s",
+            prediction.performance_forecast.capacity_limit
+        );
         if !prediction.performance_forecast.bottlenecks.is_empty() {
-            println!("   Potential Bottlenecks: {}", prediction.performance_forecast.bottlenecks.join(", "));
+            println!(
+                "   Potential Bottlenecks: {}",
+                prediction.performance_forecast.bottlenecks.join(", ")
+            );
         }
-        
+
         // Security Alerts
         if !prediction.security_alerts.is_empty() {
             println!("\n🚨 SECURITY ALERTS:");
@@ -320,7 +375,7 @@ Format as JSON with these sections:
                 println!("   • {}", alert);
             }
         }
-        
+
         // Recommendations
         if !prediction.recommendations.is_empty() {
             println!("\n💡 RECOMMENDATIONS:");
@@ -328,9 +383,9 @@ Format as JSON with these sections:
                 println!("   {}. {}", i + 1, recommendation);
             }
         }
-        
+
         println!("\n🎯 Use these insights to prevent issues before they happen!");
-        
+
         Ok(())
     }
 }

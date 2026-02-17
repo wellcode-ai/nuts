@@ -1,10 +1,10 @@
+use crate::config::Config;
 use anthropic::{
     client::ClientBuilder,
-    types::{Message, ContentBlock, MessagesRequestBuilder, Role},
+    types::{ContentBlock, Message, MessagesRequestBuilder, Role},
 };
 use reqwest;
 use serde_json::Value;
-use crate::config::Config;
 
 pub struct DiscoverCommand {
     config: Config,
@@ -37,7 +37,7 @@ impl DiscoverCommand {
     /// Auto-Discovery & API Intelligence
     pub async fn discover(&self, base_url: &str) -> Result<ApiMap, Box<dyn std::error::Error>> {
         println!("🔍 Discovering API endpoints at: {}", base_url);
-        
+
         let mut api_map = ApiMap {
             base_url: base_url.to_string(),
             endpoints: Vec::new(),
@@ -65,10 +65,13 @@ impl DiscoverCommand {
         Ok(api_map)
     }
 
-    async fn discover_documentation(&self, api_map: &mut ApiMap) -> Result<(), Box<dyn std::error::Error>> {
+    async fn discover_documentation(
+        &self,
+        api_map: &mut ApiMap,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let doc_endpoints = vec![
             "/docs",
-            "/api-docs", 
+            "/api-docs",
             "/swagger",
             "/openapi.json",
             "/api/docs",
@@ -82,18 +85,18 @@ impl DiscoverCommand {
 
         for endpoint in doc_endpoints {
             let url = format!("{}{}", api_map.base_url, endpoint);
-            
+
             match client.get(&url).send().await {
                 Ok(response) if response.status().is_success() => {
                     println!("✅ Found documentation at: {}", endpoint);
-                    
+
                     let content = response.text().await?;
-                    
+
                     // Try to parse as OpenAPI/Swagger
                     if let Ok(openapi) = serde_json::from_str::<Value>(&content) {
                         self.parse_openapi_spec(&openapi, api_map)?;
                     }
-                    
+
                     api_map.documentation = Some(url);
                     break;
                 }
@@ -104,16 +107,22 @@ impl DiscoverCommand {
         Ok(())
     }
 
-    fn parse_openapi_spec(&self, spec: &Value, api_map: &mut ApiMap) -> Result<(), Box<dyn std::error::Error>> {
+    fn parse_openapi_spec(
+        &self,
+        spec: &Value,
+        api_map: &mut ApiMap,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(paths) = spec.get("paths").and_then(|p| p.as_object()) {
             for (path, path_spec) in paths {
                 if let Some(path_obj) = path_spec.as_object() {
                     for (method, operation) in path_obj {
-                        if method != "parameters" { // Skip parameters key
+                        if method != "parameters" {
+                            // Skip parameters key
                             let endpoint = ApiEndpoint {
                                 path: path.clone(),
                                 method: method.to_uppercase(),
-                                description: operation.get("summary")
+                                description: operation
+                                    .get("summary")
                                     .and_then(|s| s.as_str())
                                     .map(|s| s.to_string()),
                                 parameters: self.extract_parameters(operation),
@@ -136,7 +145,7 @@ impl DiscoverCommand {
 
     fn extract_parameters(&self, operation: &Value) -> Vec<String> {
         let mut params = Vec::new();
-        
+
         if let Some(parameters) = operation.get("parameters").and_then(|p| p.as_array()) {
             for param in parameters {
                 if let Some(name) = param.get("name").and_then(|n| n.as_str()) {
@@ -144,12 +153,13 @@ impl DiscoverCommand {
                 }
             }
         }
-        
+
         params
     }
 
     fn extract_response_type(&self, operation: &Value) -> Option<String> {
-        operation.get("responses")
+        operation
+            .get("responses")
             .and_then(|r| r.get("200"))
             .and_then(|r| r.get("content"))
             .and_then(|c| c.as_object())
@@ -157,7 +167,10 @@ impl DiscoverCommand {
             .map(|s| s.to_string())
     }
 
-    async fn discover_common_patterns(&self, api_map: &mut ApiMap) -> Result<(), Box<dyn std::error::Error>> {
+    async fn discover_common_patterns(
+        &self,
+        api_map: &mut ApiMap,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let common_patterns = vec![
             ("/api", "GET"),
             ("/api/v1", "GET"),
@@ -175,7 +188,7 @@ impl DiscoverCommand {
 
         for (path, method) in common_patterns {
             let url = format!("{}{}", api_map.base_url, path);
-            
+
             let request = match method {
                 "GET" => client.get(&url),
                 "POST" => client.post(&url),
@@ -185,11 +198,11 @@ impl DiscoverCommand {
             match request.send().await {
                 Ok(response) => {
                     let status = response.status();
-                    
+
                     // Consider it a valid endpoint if it's not 404
                     if status != reqwest::StatusCode::NOT_FOUND {
                         println!("✅ Discovered endpoint: {} {}", method, path);
-                        
+
                         let endpoint = ApiEndpoint {
                             path: path.to_string(),
                             method: method.to_string(),
@@ -197,9 +210,9 @@ impl DiscoverCommand {
                             parameters: Vec::new(),
                             response_type: self.detect_response_type(&response).await,
                         };
-                        
+
                         api_map.endpoints.push(endpoint);
-                        
+
                         // Try to detect authentication requirements
                         if status == reqwest::StatusCode::UNAUTHORIZED {
                             api_map.authentication = Some("Authentication required".to_string());
@@ -221,13 +234,17 @@ impl DiscoverCommand {
         }
     }
 
-    async fn analyze_endpoints_with_ai(&self, api_map: &mut ApiMap) -> Result<(), Box<dyn std::error::Error>> {
-        let api_key = self.config.anthropic_api_key.as_ref()
+    async fn analyze_endpoints_with_ai(
+        &self,
+        api_map: &mut ApiMap,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let api_key = self
+            .config
+            .anthropic_api_key
+            .as_ref()
             .ok_or("API key not configured for AI analysis")?;
 
-        let ai_client = ClientBuilder::default()
-            .api_key(api_key.clone())
-            .build()?;
+        let ai_client = ClientBuilder::default().api_key(api_key.clone()).build()?;
 
         let endpoints_json = serde_json::to_string_pretty(&api_map.endpoints)?;
 
@@ -250,15 +267,18 @@ Be specific and actionable in your recommendations.",
             api_map.base_url, endpoints_json
         );
 
-        let response = ai_client.messages(MessagesRequestBuilder::default()
-            .messages(vec![Message {
-                role: Role::User,
-                content: vec![ContentBlock::Text { text: prompt }],
-            }])
-            .model("claude-3-sonnet-20240229".to_string())
-            .max_tokens(1500_usize)
-            .build()?
-        ).await?;
+        let response = ai_client
+            .messages(
+                MessagesRequestBuilder::default()
+                    .messages(vec![Message {
+                        role: Role::User,
+                        content: vec![ContentBlock::Text { text: prompt }],
+                    }])
+                    .model("claude-3-sonnet-20240229".to_string())
+                    .max_tokens(1500_usize)
+                    .build()?,
+            )
+            .await?;
 
         if let Some(ContentBlock::Text { text }) = response.content.first() {
             println!("\n🤖 AI Analysis:");
@@ -268,26 +288,37 @@ Be specific and actionable in your recommendations.",
         Ok(())
     }
 
-    async fn generate_test_recommendations(&self, api_map: &ApiMap) -> Result<(), Box<dyn std::error::Error>> {
+    async fn generate_test_recommendations(
+        &self,
+        api_map: &ApiMap,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n💡 Test Recommendations:");
-        
+
         for endpoint in &api_map.endpoints {
             match endpoint.method.as_str() {
                 "GET" => {
-                    println!("  📝 Test {} {}: Check response structure, status codes, and pagination",
-                        endpoint.method, endpoint.path);
+                    println!(
+                        "  📝 Test {} {}: Check response structure, status codes, and pagination",
+                        endpoint.method, endpoint.path
+                    );
                 }
                 "POST" => {
-                    println!("  📝 Test {} {}: Validate input, test creation, check error handling",
-                        endpoint.method, endpoint.path);
+                    println!(
+                        "  📝 Test {} {}: Validate input, test creation, check error handling",
+                        endpoint.method, endpoint.path
+                    );
                 }
                 "PUT" | "PATCH" => {
-                    println!("  📝 Test {} {}: Test updates, partial updates, and idempotency",
-                        endpoint.method, endpoint.path);
+                    println!(
+                        "  📝 Test {} {}: Test updates, partial updates, and idempotency",
+                        endpoint.method, endpoint.path
+                    );
                 }
                 "DELETE" => {
-                    println!("  📝 Test {} {}: Verify deletion, check cascading effects",
-                        endpoint.method, endpoint.path);
+                    println!(
+                        "  📝 Test {} {}: Verify deletion, check cascading effects",
+                        endpoint.method, endpoint.path
+                    );
                 }
                 _ => {}
             }
@@ -304,12 +335,23 @@ Be specific and actionable in your recommendations.",
     }
 
     /// Generate flow from discovered endpoints
-    pub async fn generate_flow(&self, api_map: &ApiMap, flow_name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        println!("📄 Generating flow '{}' from discovered endpoints...", flow_name);
-        
+    pub async fn generate_flow(
+        &self,
+        api_map: &ApiMap,
+        flow_name: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        println!(
+            "📄 Generating flow '{}' from discovered endpoints...",
+            flow_name
+        );
+
         // This would integrate with the existing flow system
-        println!("✅ Flow '{}' generated with {} endpoints", flow_name, api_map.endpoints.len());
-        
+        println!(
+            "✅ Flow '{}' generated with {} endpoints",
+            flow_name,
+            api_map.endpoints.len()
+        );
+
         Ok(())
     }
 }
