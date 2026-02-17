@@ -1,5 +1,8 @@
+use crate::mcp::perf::PerfReport;
 use crate::mcp::security::{RiskLevel, SecurityFinding, SecurityReport, Severity};
+use crate::mcp::snapshot::{CompareResult, Snapshot};
 use crate::mcp::test_runner::{TestResult, TestStatus, TestSummary};
+use crate::mcp::types::ServerCapabilities;
 use crate::output::colors;
 use comfy_table::{presets, ContentArrangement, Table};
 use std::io::IsTerminal;
@@ -410,6 +413,398 @@ pub fn spinner_style() -> indicatif::ProgressStyle {
     indicatif::ProgressStyle::with_template("  {spinner:.cyan} {msg}")
         .unwrap_or_else(|_| indicatif::ProgressStyle::default_spinner())
         .tick_strings(&["\u{25cb}", "\u{25d4}", "\u{25d1}", "\u{25d5}", "\u{25cf}"])
+}
+
+// ---------------------------------------------------------------------------
+// MCP Discovery renderer
+// ---------------------------------------------------------------------------
+
+/// Render MCP server capabilities with colorful output.
+pub fn render_discovery(caps: &ServerCapabilities) {
+    let width = terminal_width().min(76);
+    let separator: String = "\u{2500}".repeat(width.saturating_sub(2));
+
+    println!();
+    println!(
+        "  {}",
+        colors::accent_bold().apply_to("MCP Server Discovery")
+    );
+    println!("  {}", colors::muted().apply_to(&separator));
+    println!(
+        "  {} {}",
+        colors::muted().apply_to("Server:"),
+        colors::accent_bold().apply_to(&caps.server_name),
+    );
+    println!(
+        "  {} {}",
+        colors::muted().apply_to("Version:"),
+        &caps.server_version,
+    );
+    println!(
+        "  {} {}",
+        colors::muted().apply_to("Protocol:"),
+        &caps.protocol_version,
+    );
+    println!("  {}", colors::muted().apply_to(&separator));
+
+    // Tools
+    if caps.tools.is_empty() {
+        println!(
+            "\n  {}",
+            colors::muted().apply_to("Tools: (none)")
+        );
+    } else {
+        println!(
+            "\n  {}",
+            colors::accent_bold().apply_to(format!("Tools ({})", caps.tools.len()))
+        );
+        for tool in &caps.tools {
+            let desc = tool.description.as_deref().unwrap_or("(no description)");
+            println!(
+                "    {} {}",
+                colors::success().apply_to(format!("{:<24}", &tool.name)),
+                colors::muted().apply_to(desc),
+            );
+
+            if let Some(schema) = &tool.input_schema {
+                if let Some(props) = schema.get("properties").and_then(|p| p.as_object()) {
+                    let required: Vec<String> = schema
+                        .get("required")
+                        .and_then(|r| r.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    for (param_name, param_schema) in props {
+                        let param_type = param_schema
+                            .get("type")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("any");
+                        let is_required = required.contains(param_name);
+                        let req_badge = if is_required {
+                            format!("{}", colors::error_bold().apply_to("required"))
+                        } else {
+                            format!("{}", colors::muted().apply_to("optional"))
+                        };
+                        let param_desc = param_schema
+                            .get("description")
+                            .and_then(|d| d.as_str())
+                            .unwrap_or("");
+
+                        println!(
+                            "      {} {} {} {}",
+                            colors::muted().apply_to("-"),
+                            param_name,
+                            colors::warning().apply_to(format!("({})", param_type)),
+                            req_badge,
+                        );
+                        if !param_desc.is_empty() {
+                            println!(
+                                "        {}",
+                                colors::muted().apply_to(param_desc),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Resources
+    let total_resources = caps.resources.len() + caps.resource_templates.len();
+    if total_resources == 0 {
+        println!(
+            "\n  {}",
+            colors::muted().apply_to("Resources: (none)")
+        );
+    } else {
+        println!(
+            "\n  {}",
+            colors::accent_bold().apply_to(format!("Resources ({})", total_resources))
+        );
+        for resource in &caps.resources {
+            let desc = resource
+                .description
+                .as_deref()
+                .unwrap_or("(no description)");
+            println!(
+                "    {} {}",
+                colors::success().apply_to(format!("{:<24}", &resource.uri)),
+                colors::muted().apply_to(desc),
+            );
+        }
+        for template in &caps.resource_templates {
+            let desc = template
+                .description
+                .as_deref()
+                .unwrap_or("(no description)");
+            println!(
+                "    {} {} {}",
+                colors::success().apply_to(format!("{:<24}", &template.uri_template)),
+                colors::muted().apply_to(desc),
+                colors::warning().apply_to("(template)"),
+            );
+        }
+    }
+
+    // Prompts
+    if caps.prompts.is_empty() {
+        println!(
+            "\n  {}",
+            colors::muted().apply_to("Prompts: (none)")
+        );
+    } else {
+        println!(
+            "\n  {}",
+            colors::accent_bold().apply_to(format!("Prompts ({})", caps.prompts.len()))
+        );
+        for prompt in &caps.prompts {
+            let desc = prompt.description.as_deref().unwrap_or("(no description)");
+            println!(
+                "    {} {}",
+                colors::success().apply_to(format!("{:<24}", &prompt.name)),
+                colors::muted().apply_to(desc),
+            );
+
+            for arg in &prompt.arguments {
+                let req_badge = if arg.required {
+                    format!("{}", colors::error_bold().apply_to("required"))
+                } else {
+                    format!("{}", colors::muted().apply_to("optional"))
+                };
+                let arg_desc = arg.description.as_deref().unwrap_or("");
+                println!(
+                    "      {} {} {} {}",
+                    colors::muted().apply_to("-"),
+                    arg.name,
+                    req_badge,
+                    colors::muted().apply_to(arg_desc),
+                );
+            }
+        }
+    }
+
+    println!();
+}
+
+// ---------------------------------------------------------------------------
+// MCP Perf Report renderer
+// ---------------------------------------------------------------------------
+
+/// Render an MCP performance report with colorful output.
+pub fn render_perf_report(report: &PerfReport) {
+    let width = terminal_width().min(76);
+    let separator: String = "\u{2500}".repeat(width.saturating_sub(2));
+
+    println!();
+    println!(
+        "  {}",
+        colors::accent_bold().apply_to("MCP Performance Report")
+    );
+    println!("  {}", colors::muted().apply_to(&separator));
+
+    // Tool and summary
+    println!(
+        "  {} {}",
+        colors::muted().apply_to("Tool:"),
+        colors::accent_bold().apply_to(&report.tool_name),
+    );
+
+    let rps = if report.duration.as_secs_f64() > 0.0 {
+        report.total_calls as f64 / report.duration.as_secs_f64()
+    } else {
+        0.0
+    };
+
+    println!(
+        "  {} {} calls in {:.1}s ({} calls/sec)",
+        colors::muted().apply_to("Total:"),
+        report.total_calls,
+        report.duration.as_secs_f64(),
+        colors::success_bold().apply_to(format!("{:.1}", rps)),
+    );
+
+    // Success/failure
+    let error_rate = if report.total_calls > 0 {
+        (report.failed as f64 / report.total_calls as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    let success_str = format!("{}", colors::success_bold().apply_to(format!("{} passed", report.successful)));
+    let failed_str = if report.failed > 0 {
+        format!("{}", colors::error_bold().apply_to(format!("{} failed ({:.1}%)", report.failed, error_rate)))
+    } else {
+        format!("{}", colors::success().apply_to("0 failed"))
+    };
+
+    println!("  {} {}, {}", colors::muted().apply_to("Result:"), success_str, failed_str);
+
+    // Latency stats
+    println!();
+    println!(
+        "  {}",
+        colors::accent_bold().apply_to("Latency (ms)")
+    );
+
+    let color_latency = |ms: f64| -> String {
+        if ms < 100.0 {
+            format!("{}", colors::success().apply_to(format!("{:.2}", ms)))
+        } else if ms < 500.0 {
+            format!("{}", colors::warning().apply_to(format!("{:.2}", ms)))
+        } else {
+            format!("{}", colors::error().apply_to(format!("{:.2}", ms)))
+        }
+    };
+
+    println!(
+        "    {} {}    {} {}    {} {}    {} {}",
+        colors::muted().apply_to("Min:"), color_latency(report.stats.min_ms),
+        colors::muted().apply_to("Max:"), color_latency(report.stats.max_ms),
+        colors::muted().apply_to("Mean:"), color_latency(report.stats.mean_ms),
+        colors::muted().apply_to("Median:"), color_latency(report.stats.median_ms),
+    );
+    println!(
+        "    {} {}    {} {}    {} {}",
+        colors::muted().apply_to("p95:"), color_latency(report.stats.p95_ms),
+        colors::muted().apply_to("p99:"), color_latency(report.stats.p99_ms),
+        colors::muted().apply_to("StdDev:"), color_latency(report.stats.stddev_ms),
+    );
+
+    println!();
+}
+
+// ---------------------------------------------------------------------------
+// MCP Snapshot renderers
+// ---------------------------------------------------------------------------
+
+/// Render a captured snapshot summary with colorful output.
+pub fn render_snapshot_capture(snapshot: &Snapshot) {
+    let width = terminal_width().min(76);
+    let separator: String = "\u{2500}".repeat(width.saturating_sub(2));
+
+    println!();
+    println!(
+        "  {}",
+        colors::accent_bold().apply_to("MCP Snapshot Captured")
+    );
+    println!("  {}", colors::muted().apply_to(&separator));
+    println!(
+        "  {} {} v{}",
+        colors::muted().apply_to("Server:"),
+        colors::accent_bold().apply_to(&snapshot.server_name),
+        &snapshot.server_version,
+    );
+    println!(
+        "  {} {}",
+        colors::muted().apply_to("Captured:"),
+        &snapshot.captured_at,
+    );
+    println!(
+        "  {} {}",
+        colors::muted().apply_to("Tools:"),
+        snapshot.tool_results.len(),
+    );
+    println!();
+
+    for ts in &snapshot.tool_results {
+        let (status, style) = if ts.output.is_error {
+            ("ERROR", colors::error_bold())
+        } else {
+            ("OK", colors::success_bold())
+        };
+
+        let time_str = if ts.duration_ms < 1000 {
+            format!("{}ms", ts.duration_ms)
+        } else {
+            format!("{:.1}s", ts.duration_ms as f64 / 1000.0)
+        };
+
+        println!(
+            "  {} {:<30} {}",
+            style.apply_to(format!("[{}]", status)),
+            ts.tool_name,
+            colors::muted().apply_to(&time_str),
+        );
+    }
+
+    println!();
+}
+
+/// Render a snapshot comparison result with colorful output.
+pub fn render_snapshot_compare(result: &CompareResult) {
+    let width = terminal_width().min(76);
+    let separator: String = "\u{2500}".repeat(width.saturating_sub(2));
+
+    println!();
+    println!(
+        "  {}",
+        colors::accent_bold().apply_to("MCP Snapshot Comparison")
+    );
+    println!("  {}", colors::muted().apply_to(&separator));
+
+    // Summary counts
+    let mut parts = Vec::new();
+    if result.matched > 0 {
+        parts.push(format!("{}", colors::success_bold().apply_to(format!("{} matched", result.matched))));
+    }
+    if result.changed > 0 {
+        parts.push(format!("{}", colors::error_bold().apply_to(format!("{} changed", result.changed))));
+    }
+    if result.added > 0 {
+        parts.push(format!("{}", colors::warning().apply_to(format!("{} added", result.added))));
+    }
+    if result.removed > 0 {
+        parts.push(format!("{}", colors::error().apply_to(format!("{} removed", result.removed))));
+    }
+
+    println!("  {}", parts.join(", "));
+
+    if result.diffs.is_empty() {
+        println!(
+            "\n  {}\n",
+            colors::success().apply_to("No differences found.")
+        );
+        return;
+    }
+
+    println!();
+    for diff in &result.diffs {
+        let status_style = match diff.actual.as_str() {
+            "added" => colors::warning(),
+            "removed" => colors::error(),
+            _ => colors::error_bold(),
+        };
+
+        println!(
+            "  {} {}",
+            status_style.apply_to(format!("[{}]", diff.actual.to_uppercase())),
+            diff.tool_name,
+        );
+
+        if diff.field != "tool" {
+            println!(
+                "    {} {}",
+                colors::muted().apply_to("field:"),
+                diff.field,
+            );
+            println!(
+                "    {} {}",
+                colors::muted().apply_to("expected:"),
+                diff.expected,
+            );
+            println!(
+                "    {} {}",
+                colors::error().apply_to("actual:"),
+                diff.actual,
+            );
+        }
+    }
+
+    println!();
 }
 
 // ---------------------------------------------------------------------------

@@ -566,7 +566,7 @@ impl NutsShell {
                         role: Role::User,
                         content: vec![ContentBlock::Text { text: prompt }],
                     }])
-                    .model("claude-3-sonnet-20240229".to_string())
+                    .model("claude-sonnet-4-5-20250929".to_string())
                     .max_tokens(100_usize)
                     .build()
                     .ok()?,

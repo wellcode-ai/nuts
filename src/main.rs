@@ -687,8 +687,7 @@ fn mcp_discover(
             let json = crate::mcp::discovery::format_discovery_json(&caps);
             println!("{}", serde_json::to_string_pretty(&json)?);
         } else {
-            let human = crate::mcp::discovery::format_discovery_human(&caps);
-            crate::output::renderer::render_section("MCP Discovery", &human);
+            crate::output::renderer::render_discovery(&caps);
         }
 
         client.disconnect().await?;
@@ -795,15 +794,7 @@ fn mcp_perf(
             let json = crate::mcp::perf::format_report_json(&report);
             println!("{}", serde_json::to_string_pretty(&json)?);
         } else {
-            let (headers, rows) = crate::mcp::perf::report_table_rows(&report);
-            crate::output::renderer::render_section(
-                "MCP Performance Test",
-                &format!(
-                    "Tool: {}  |  {} iterations  |  {} warmup",
-                    report.tool_name, report.total_calls, perf_config.warmup
-                ),
-            );
-            crate::output::renderer::render_table(&headers, &rows);
+            crate::output::renderer::render_perf_report(&report);
         }
 
         Ok(())
@@ -851,14 +842,8 @@ fn mcp_snapshot(
             if let Some(ref path) = snap_args.output {
                 crate::mcp::snapshot::save_snapshot(&snapshot, path)?;
                 if !json_output {
-                    crate::output::renderer::render_section(
-                        "Snapshot Captured",
-                        &format!(
-                            "{}\nSaved to: {}",
-                            crate::mcp::snapshot::format_capture_human(&snapshot),
-                            path
-                        ),
-                    );
+                    crate::output::renderer::render_snapshot_capture(&snapshot);
+                    println!("  Saved to: {}\n", crate::output::colors::accent().apply_to(path));
                 }
             } else if json_output {
                 let json = serde_json::to_string_pretty(&snapshot)?;
@@ -894,8 +879,7 @@ fn mcp_snapshot(
                 let json = crate::mcp::snapshot::format_compare_json(&result);
                 println!("{}", serde_json::to_string_pretty(&json)?);
             } else {
-                let human = crate::mcp::snapshot::format_compare_human(&result);
-                crate::output::renderer::render_section("Snapshot Comparison", &human);
+                crate::output::renderer::render_snapshot_compare(&result);
             }
 
             if result.changed > 0 || result.added > 0 || result.removed > 0 {

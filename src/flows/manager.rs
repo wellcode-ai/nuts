@@ -278,7 +278,7 @@ impl CollectionManager {
 
             let messages_request = MessagesRequestBuilder::default()
                 .messages(messages)
-                .model("claude-3-sonnet-20240229".to_string())
+                .model("claude-sonnet-4-5-20250929".to_string())
                 .max_tokens(2000_usize)
                 .build()?;
 
@@ -399,7 +399,7 @@ impl CollectionManager {
 
         let message_request = MessagesRequestBuilder::default()
             .messages(messages)
-            .model("claude-3-haiku-20240307".to_string())
+            .model("claude-haiku-4-5-20251001".to_string())
             .max_tokens(800_usize)
             .build()?;
 
@@ -594,7 +594,7 @@ impl CollectionManager {
 
                 let messages_request = MessagesRequestBuilder::default()
                     .messages(messages)
-                    .model("claude-3-sonnet-20240229".to_string())
+                    .model("claude-sonnet-4-5-20250929".to_string())
                     .max_tokens(1000_usize)
                     .build()?;
 
@@ -835,7 +835,7 @@ impl CollectionManager {
 
         let request = MessagesRequestBuilder::default()
             .messages(messages)
-            .model("claude-3-sonnet-20240229".to_string())
+            .model("claude-sonnet-4-5-20250929".to_string())
             .max_tokens(2000_usize)
             .build()?;
 

@@ -76,9 +76,8 @@ impl AiProvider for AnthropicProvider {
     fn available_models(&self) -> Vec<&str> {
         vec![
             "claude-sonnet-4-5-20250929",
+            "claude-haiku-4-5-20251001",
             "claude-3-5-sonnet-20241022",
-            "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307",
         ]
     }
 
@@ -157,10 +156,10 @@ mod tests {
                 content: "test".to_string(),
             }],
             system: Some("You are a testing assistant.".to_string()),
-            model: "claude-3-sonnet-20240229".to_string(),
+            model: "claude-sonnet-4-5-20250929".to_string(),
             max_tokens: 1000,
         };
-        assert_eq!(req.model, "claude-3-sonnet-20240229");
+        assert_eq!(req.model, "claude-sonnet-4-5-20250929");
         assert_eq!(req.max_tokens, 1000);
         assert!(req.system.is_some());
     }

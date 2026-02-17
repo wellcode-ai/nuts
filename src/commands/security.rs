@@ -93,7 +93,19 @@ impl SecurityCommand {
         // Deep scan - additional checks
         if self.deep_scan {
             // Check common security endpoints
-            for endpoint in ["/security.txt", "/.well-known/security.txt", "/robots.txt"] {
+            for endpoint in [
+                "/security.txt",
+                "/.well-known/security.txt",
+                "/robots.txt",
+                "/.env",
+                "/wp-admin",
+                "/api/v1",
+                "/graphql",
+                "/swagger.json",
+                "/openapi.json",
+                "/.git/config",
+                "/server-status",
+            ] {
                 let sec_url = format!("{}{}", url, endpoint);
                 if let Ok(resp) = self.http_client.get(&sec_url).send().await {
                     analysis_data.push(self.analyze_response(resp).await?);
@@ -101,7 +113,7 @@ impl SecurityCommand {
             }
 
             // Check HTTP methods
-            for method in ["HEAD", "OPTIONS", "TRACE"] {
+            for method in ["HEAD", "OPTIONS", "TRACE", "PUT", "DELETE", "PATCH"] {
                 if let Ok(resp) = self
                     .http_client
                     .request(
@@ -119,27 +131,149 @@ impl SecurityCommand {
         // Combine all analyses for AI processing
         let analysis_prompt = if self.deep_scan {
             format!(
-                "You are the best security architect on the world and you will perform a deep security analysis of these API responses, including main endpoint and additional security checks.\n\n\
-                Main endpoint response:\n{}\n\n\
-                Additional endpoints and methods tested:\n{}\n\n\
-                Provide a comprehensive security analysis focusing on:\n\
-                1. Response headers security and variations across endpoints\n\
-                2. Data exposure risks and information disclosure patterns\n\
-                3. Authentication/Authorization mechanisms and consistency\n\
-                4. Security headers and configurations across endpoints\n\
-                5. Detailed security recommendations based on all findings",
+                r#"You are an elite application security architect and certified penetration tester (OSCP, CISSP, CEH). Perform an exhaustive security assessment of these API responses.
+
+MAIN ENDPOINT RESPONSE:
+{}
+
+ADDITIONAL ENDPOINTS AND METHODS TESTED:
+{}
+
+Provide a structured, professional security report with the following sections. Use severity badges [CRITICAL], [HIGH], [MEDIUM], [LOW], [INFO] for each finding.
+
+## 1. EXECUTIVE SUMMARY
+- Overall risk rating (CRITICAL / HIGH / MEDIUM / LOW)
+- Total findings count by severity
+- Top 3 most urgent issues
+
+## 2. COMPLIANCE & CERTIFICATION ASSESSMENT
+Evaluate against these frameworks:
+- **OWASP Top 10 (2021)**: Map each finding to the relevant OWASP category (A01-A10)
+- **SOC 2 Type II**: Trust Service Criteria (Security, Availability, Confidentiality, Processing Integrity, Privacy)
+- **PCI DSS v4.0**: Requirements 1-12 as applicable (especially Req 6: Secure Systems, Req 7: Access Control)
+- **ISO 27001**: Relevant controls from Annex A
+- **NIST Cybersecurity Framework**: Identify, Protect, Detect, Respond, Recover
+- **GDPR/CCPA**: Data protection and privacy implications
+
+For each framework, state: PASS / PARTIAL / FAIL with specific control references.
+
+## 3. TRANSPORT LAYER SECURITY
+- TLS version and cipher suite analysis
+- Certificate validation
+- HSTS configuration and preload status
+- Certificate transparency
+
+## 4. HTTP SECURITY HEADERS AUDIT
+For EACH of these headers, report present/missing/misconfigured with the recommended value:
+- Strict-Transport-Security (HSTS)
+- Content-Security-Policy (CSP)
+- X-Content-Type-Options
+- X-Frame-Options
+- X-XSS-Protection
+- Referrer-Policy
+- Permissions-Policy
+- Cross-Origin-Opener-Policy (COOP)
+- Cross-Origin-Embedder-Policy (COEP)
+- Cross-Origin-Resource-Policy (CORP)
+- Cache-Control (for sensitive data)
+
+## 5. AUTHENTICATION & AUTHORIZATION
+- Authentication mechanism analysis
+- Session management assessment
+- Token security (JWT analysis if applicable)
+- CORS policy evaluation
+- Rate limiting presence
+- Brute force protection
+
+## 6. DATA EXPOSURE & INFORMATION LEAKAGE
+- Server version disclosure
+- Technology stack fingerprinting
+- Error message verbosity
+- Sensitive data in responses
+- API endpoint enumeration risks
+- Debug/development endpoints accessible
+
+## 7. INJECTION & INPUT VALIDATION RISKS
+- SQL injection vectors
+- XSS vectors
+- Command injection potential
+- SSRF risks
+- Path traversal risks
+
+## 8. BUSINESS LOGIC & API SECURITY
+- IDOR (Insecure Direct Object Reference) risks
+- Mass assignment vulnerabilities
+- Rate limiting and throttling
+- API versioning security
+- Error handling consistency
+
+## 9. RISK MATRIX
+Create a risk assessment table:
+| Finding | Severity | Likelihood | Impact | OWASP Category | Remediation Priority |
+
+## 10. REMEDIATION ROADMAP
+- **Immediate (0-24h)**: Critical fixes
+- **Short-term (1-2 weeks)**: High-priority items
+- **Medium-term (1-3 months)**: Medium findings
+- **Ongoing**: Best practices and monitoring
+
+## 11. CERTIFICATION READINESS SCORE
+Rate readiness (0-100%) for each:
+- SOC 2 Type II: X%
+- PCI DSS: X%
+- ISO 27001: X%
+- OWASP Compliance: X%
+
+Be specific and actionable. Every finding must include the exact header, value, or configuration to fix."#,
                 analysis_data[0],
                 analysis_data[1..].join("\n---\n")
             )
         } else {
             format!(
-                "You are the best security architect on the world and you will analyze this API response for security issues. Consider OWASP top 10 and best practices.\n\n{}\n\
-                Provide a security analysis focusing on:\n\
-                1. Response headers security\n\
-                2. Data exposure risks\n\
-                3. Authentication/Authorization concerns\n\
-                4. Sensitive information disclosure\n\
-                5. Security recommendations",
+                r#"You are an elite application security architect and certified penetration tester (OSCP, CISSP, CEH). Analyze this API response for security vulnerabilities, compliance gaps, and risk exposure.
+
+API RESPONSE:
+{}
+
+Provide a professional security assessment with these sections. Use severity badges [CRITICAL], [HIGH], [MEDIUM], [LOW], [INFO] for each finding.
+
+## 1. EXECUTIVE SUMMARY
+- Overall risk rating with justification
+- Key findings count by severity
+
+## 2. SECURITY HEADERS AUDIT
+For each standard security header, report: Present/Missing/Misconfigured with the recommended value:
+- Strict-Transport-Security, Content-Security-Policy, X-Content-Type-Options
+- X-Frame-Options, Referrer-Policy, Permissions-Policy
+- CORS headers, Cache-Control
+
+## 3. COMPLIANCE SNAPSHOT
+Quick assessment against:
+- **OWASP Top 10**: Which categories are violated (A01-A10)?
+- **SOC 2**: Key trust service criteria gaps
+- **PCI DSS**: Critical requirement gaps
+- **GDPR/CCPA**: Data protection concerns
+
+## 4. INFORMATION DISCLOSURE
+- Server/technology fingerprinting
+- Sensitive data exposure
+- Error message analysis
+- Version disclosure
+
+## 5. AUTHENTICATION & ACCESS CONTROL
+- Auth mechanism assessment
+- Session/token security
+- Rate limiting presence
+
+## 6. RISK MATRIX
+| Finding | Severity | OWASP Category | Fix Priority |
+
+## 7. REMEDIATION PLAN
+- **Immediate**: Critical and high items with exact fixes
+- **Short-term**: Medium items
+- **Ongoing**: Best practices
+
+Be specific. Include exact header values and configuration changes needed."#,
                 analysis_data[0]
             )
         };
@@ -156,8 +290,8 @@ impl SecurityCommand {
 
         let messages_request = MessagesRequestBuilder::default()
             .messages(messages)
-            .model("claude-3-sonnet-20240229".to_string())
-            .max_tokens(1000_usize)
+            .model("claude-sonnet-4-5-20250929".to_string())
+            .max_tokens(8192_usize)
             .build()?;
 
         let messages_response = self.ai_client.messages(messages_request).await?;

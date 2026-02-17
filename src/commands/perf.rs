@@ -63,7 +63,7 @@ impl PerfCommand {
 
         let message_request = MessagesRequestBuilder::default()
             .messages(messages)
-            .model("claude-3-haiku-20240307".to_string())
+            .model("claude-haiku-4-5-20251001".to_string())
             .max_tokens(300_usize)
             .build()?;
 

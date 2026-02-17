@@ -6,7 +6,7 @@ export default function ReadmePage() {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
           <h1 className="nuts-logo mb-4">NUTS</h1>
-          <p className="subtitle mb-8">AI-Powered CURL Killer & API Testing Revolution</p>
+          <p className="subtitle mb-8">AI-Powered API & MCP Server Testing Suite</p>
           <div className="flex justify-center gap-4 mb-8">
             <Link href="/" className="cyberpunk-button">← Home</Link>
             <a href="https://github.com/wellcode-ai/nuts" className="cyberpunk-button">GitHub</a>
@@ -202,6 +202,69 @@ nuts fix https://api.broken.com
           </section>
 
           <section className="mb-12">
+            <h2 className="section-title">MCP Server Testing</h2>
+
+            <div className="feature-grid">
+              <div className="feature-card">
+                <h3 className="feature-title">Discover & Connect</h3>
+                <p className="feature-description">
+                  Automatically discover MCP server capabilities, tools, resources, and prompts across all transport types.
+                </p>
+                <div className="code-block">
+                  <pre className="code-content">
+{`nuts mcp discover --http https://api.example.com/mcp
+nuts mcp discover --stdio "node server.js"
+nuts mcp connect --http https://api.example.com/mcp --bearer TOKEN`}
+                  </pre>
+                </div>
+              </div>
+
+              <div className="feature-card">
+                <h3 className="feature-title">YAML Test Suites</h3>
+                <p className="feature-description">
+                  Write declarative test suites in YAML and run them with a single command for repeatable MCP server validation.
+                </p>
+                <div className="code-block">
+                  <pre className="code-content">
+{`# Write declarative tests in YAML
+# Run with a single command
+nuts mcp test mcp-tests.yaml
+nuts mcp test --file tests/integration.yaml`}
+                  </pre>
+                </div>
+              </div>
+
+              <div className="feature-card">
+                <h3 className="feature-title">Security Scanner</h3>
+                <p className="feature-description">
+                  AI-powered security analysis that checks for injection vulnerabilities, auth bypass, and schema validation issues.
+                </p>
+                <div className="code-block">
+                  <pre className="code-content">
+{`# AI-powered security analysis
+nuts mcp security --http https://api.example.com/mcp
+# Checks: injection, auth bypass, schema validation`}
+                  </pre>
+                </div>
+              </div>
+
+              <div className="feature-card">
+                <h3 className="feature-title">Performance & Snapshots</h3>
+                <p className="feature-description">
+                  Benchmark MCP tool performance and capture snapshots for regression testing across server versions.
+                </p>
+                <div className="code-block">
+                  <pre className="code-content">
+{`nuts mcp perf --http https://example.com/mcp --tool search --iterations 100
+nuts mcp snapshot capture --http https://example.com/mcp -o baseline.json
+nuts mcp snapshot compare --compare baseline.json --http https://example.com/mcp`}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="mb-12">
             <h2 className="section-title">📚 Complete Command Reference</h2>
             
             <div className="mb-8">
@@ -242,6 +305,42 @@ nuts fix https://api.example.com/broken           # Auto-fix issues`}
               </div>
             </div>
 
+            <div className="mb-8">
+              <h3 className="feature-title">🔌 MCP Server Testing Commands</h3>
+              <div className="code-block">
+                <div className="code-header">MCP Server Testing Commands</div>
+                <pre className="code-content">
+{`# Discover server capabilities
+nuts mcp discover --http https://example.com/mcp
+nuts mcp discover --stdio "node server.js"
+nuts mcp discover --http https://example.com/mcp --bearer TOKEN
+
+# Run test suites
+nuts mcp test mcp-tests.yaml
+nuts mcp test --file tests/suite.yaml --json
+
+# Security scanning (requires API key)
+nuts mcp security --http https://example.com/mcp
+
+# Performance benchmarking
+nuts mcp perf --http https://example.com/mcp --tool echo --iterations 100
+
+# Snapshot regression testing
+nuts mcp snapshot capture --http https://example.com/mcp -o baseline.json
+nuts mcp snapshot compare --compare baseline.json --http https://example.com/mcp
+
+# AI test generation (requires API key)
+nuts mcp generate --http https://example.com/mcp
+
+# Transport options (available on all MCP commands)
+--http URL          # Streamable HTTP (recommended)
+--sse URL           # Legacy Server-Sent Events
+--stdio "cmd args"  # Spawn child process
+--bearer TOKEN      # Bearer auth for HTTP
+--set-env KEY=VALUE # Env vars for stdio`}
+                </pre>
+              </div>
+            </div>
 
             <div className="mb-8">
               <h3 className="feature-title">⚙️ Configuration & Shortcuts</h3>

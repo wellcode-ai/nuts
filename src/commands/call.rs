@@ -714,7 +714,7 @@ impl CallCommand {
             .header("x-api-key", std::env::var("ANTHROPIC_API_KEY")?)
             .header("anthropic-version", "2023-06-01")
             .json(&serde_json::json!({
-                "model": "claude-3-sonnet-20240229",
+                "model": "claude-sonnet-4-5-20250929",
                 "max_tokens": 1000,
                 "messages": [{
                     "role": "user",
