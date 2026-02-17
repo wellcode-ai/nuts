@@ -17,7 +17,7 @@ export default function Home() {
         
         {/* Clear subtitle */}
         <p className="subtitle">
-          AI-Powered CURL Killer & API Testing Revolution
+          AI-Powered API & MCP Server Testing Suite
         </p>
       </div>
 
@@ -37,23 +37,23 @@ export default function Home() {
             <span className="terminal-prompt">$</span>
             <span className="terminal-command">cargo install --git https://github.com/wellcode-ai/nuts</span>
           </div>
-          
+
           <div className="terminal-line">
             <span className="terminal-prompt">$</span>
-            <span className="terminal-command">nuts ask &quot;Create 5 test users with realistic data&quot;</span>
-            <span className="terminal-comment"># AI CURL killer</span>
+            <span className="terminal-command">nuts mcp discover --http https://api.example.com/mcp</span>
+            <span className="terminal-comment"># Discover tools</span>
           </div>
-          
+
           <div className="terminal-line">
             <span className="terminal-prompt">$</span>
-            <span className="terminal-command">nuts generate products 50</span>
-            <span className="terminal-comment"># AI test data</span>
+            <span className="terminal-command">nuts mcp test mcp-tests.yaml</span>
+            <span className="terminal-comment"># Run test suite</span>
           </div>
-          
+
           <div className="terminal-line">
             <span className="terminal-prompt">$</span>
-            <span className="terminal-command">nuts monitor https://api.myapp.com --smart</span>
-            <span className="terminal-comment"># Smart monitoring</span>
+            <span className="terminal-command">nuts mcp security --http https://api.example.com/mcp</span>
+            <span className="terminal-comment"># Security scan</span>
           </div>
         </div>
       </div>

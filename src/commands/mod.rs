@@ -1,18 +1,18 @@
 use std::sync::Arc;
 
-pub mod call;
-pub mod security;
-pub mod perf;
-pub mod mock;
-pub mod config;
-pub mod test;
-pub mod discover;
-pub mod predict;
 pub mod ask;
-pub mod generate;
-pub mod monitor;
+pub mod call;
+pub mod config;
+pub mod discover;
 pub mod explain;
 pub mod fix;
+pub mod generate;
+pub mod mock;
+pub mod monitor;
+pub mod perf;
+pub mod predict;
+pub mod security;
+pub mod test;
 
 // Add shared command result type
 pub type CommandResult = Result<(), Box<dyn std::error::Error>>;
@@ -29,7 +29,7 @@ pub struct CommandContext {
 pub trait Command {
     fn name(&self) -> &'static str;
     fn description(&self) -> &'static str;
-    
+
     fn execute(&self, ctx: &CommandContext, args: &[String]) -> CommandResult;
 }
 

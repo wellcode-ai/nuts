@@ -1,16 +1,16 @@
-use crate::flows::*;
-use crate::commands::perf::PerfCommand;
-use rustyline::Editor;
-use std::path::PathBuf;
-use std::fs;
-use std::time::Duration;
-use std::collections::HashMap;
 use crate::commands::call::CallCommand;
 use crate::commands::mock::MockServer;
+use crate::commands::perf::PerfCommand;
+use crate::config::Config;
+use crate::flows::*;
 use anthropic::client::{Client as AnthropicClient, ClientBuilder};
 use anthropic::types::{ContentBlock, Message, MessagesRequestBuilder, Role};
 use console::style;
-use crate::config::Config;
+use rustyline::Editor;
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use std::time::Duration;
 use url;
 
 #[allow(dead_code)]
@@ -23,16 +23,12 @@ pub struct CollectionManager {
 #[allow(dead_code)]
 impl CollectionManager {
     pub fn new(collections_dir: PathBuf, config: Config) -> Self {
-        let api_key = config.anthropic_api_key.clone()
-            .unwrap_or_default();
+        let api_key = config.anthropic_api_key.clone().unwrap_or_default();
 
         Self {
             collections_dir,
             config,
-            ai_client: ClientBuilder::default()
-                .api_key(api_key)
-                .build()
-                .unwrap(),
+            ai_client: ClientBuilder::default().api_key(api_key).build().unwrap(),
         }
     }
 
@@ -42,10 +38,10 @@ impl CollectionManager {
 
     pub fn create_collection(&self, name: &str) -> Result<(), Box<dyn std::error::Error>> {
         let path = self.get_collection_path(name);
-        
+
         let template = OpenAPISpec::new(name);
         template.save(&path)?;
-        
+
         println!("✅ Created OpenAPI flow at: {}", path.display());
         Ok(())
     }
@@ -62,11 +58,21 @@ impl CollectionManager {
         // Parse and clean the URL/path
         let (server_url, clean_path) = if path.starts_with("http") {
             let url = url::Url::parse(path)?;
-            let base = format!("{}://{}", url.scheme(), url.host_str().unwrap_or("localhost"));
+            let base = format!(
+                "{}://{}",
+                url.scheme(),
+                url.host_str().unwrap_or("localhost")
+            );
             (base, url.path().to_string())
         } else {
-            ("http://localhost:3000".to_string(), 
-             if path.starts_with('/') { path.to_string() } else { format!("/{}", path) })
+            (
+                "http://localhost:3000".to_string(),
+                if path.starts_with('/') {
+                    path.to_string()
+                } else {
+                    format!("/{}", path)
+                },
+            )
         };
 
         // Update servers
@@ -78,7 +84,10 @@ impl CollectionManager {
         }
 
         // Create path item
-        let path_item = spec.paths.entry(clean_path.clone()).or_insert(PathItem::new());
+        let path_item = spec
+            .paths
+            .entry(clean_path.clone())
+            .or_insert(PathItem::new());
 
         // Create operation with better defaults
         let operation = Operation {
@@ -91,15 +100,18 @@ impl CollectionManager {
                     required: Some(true),
                     content: {
                         let mut content = HashMap::new();
-                        content.insert("application/json".to_string(), MediaType {
-                            schema: Schema {
-                                schema_type: "object".to_string(),
-                                format: None,
-                                properties: None,
-                                items: None,
+                        content.insert(
+                            "application/json".to_string(),
+                            MediaType {
+                                schema: Schema {
+                                    schema_type: "object".to_string(),
+                                    format: None,
+                                    properties: None,
+                                    items: None,
+                                },
+                                example: Some(serde_json::json!({})),
                             },
-                            example: Some(serde_json::json!({})),
-                        });
+                        );
                         content
                     },
                 })
@@ -108,26 +120,36 @@ impl CollectionManager {
             },
             responses: {
                 let mut responses = HashMap::new();
-                responses.insert("200".to_string(), Response {
-                    description: "Successful response".to_string(),
-                    content: Some({
-                        let mut content = HashMap::new();
-                        content.insert("application/json".to_string(), MediaType {
-                            schema: Schema {
-                                schema_type: "object".to_string(),
-                                format: None,
-                                properties: None,
-                                items: None,
-                            },
-                            example: None,
-                        });
-                        content
-                    }),
-                });
+                responses.insert(
+                    "200".to_string(),
+                    Response {
+                        description: "Successful response".to_string(),
+                        content: Some({
+                            let mut content = HashMap::new();
+                            content.insert(
+                                "application/json".to_string(),
+                                MediaType {
+                                    schema: Schema {
+                                        schema_type: "object".to_string(),
+                                        format: None,
+                                        properties: None,
+                                        items: None,
+                                    },
+                                    example: None,
+                                },
+                            );
+                            content
+                        }),
+                    },
+                );
                 responses
             },
             security: None,
-            tags: Some(vec![clean_path.split('/').nth(1).unwrap_or("default").to_string()]),
+            tags: Some(vec![clean_path
+                .split('/')
+                .nth(1)
+                .unwrap_or("default")
+                .to_string()]),
             mock_data: None,
         };
 
@@ -150,22 +172,27 @@ impl CollectionManager {
         &self,
         flow: &str,
         endpoint: &str,
-        _args: &[String]
+        _args: &[String],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let spec_path = self.get_collection_path(flow);
         let spec = OpenAPISpec::load(&spec_path)?;
 
         // Find the endpoint in the spec
-        let (path, item) = spec.paths.iter()
+        let (path, item) = spec
+            .paths
+            .iter()
             .find(|(p, _)| p.contains(endpoint))
             .ok_or("Endpoint not found in flow")?;
 
         // Determine method and operation
-        let (method, _operation) = item.get_operation()
+        let (method, _operation) = item
+            .get_operation()
             .ok_or("No operation found for endpoint")?;
 
         // Build the full URL
-        let base_url = spec.servers.first()
+        let base_url = spec
+            .servers
+            .first()
             .map(|s| s.url.as_str())
             .unwrap_or("http://localhost:3000");
         let full_url = format!("{}{}", base_url, path);
@@ -179,11 +206,11 @@ impl CollectionManager {
     pub async fn start_mock_server(
         &self,
         name: &str,
-        port: u16
+        port: u16,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let spec_path = self.get_collection_path(name);
         let spec = OpenAPISpec::load(&spec_path)?;
-        
+
         println!("Starting mock server for {} on port {}", name, port);
         MockServer::new(spec, port).start().await?;
         Ok(())
@@ -193,10 +220,13 @@ impl CollectionManager {
         &self,
         flow: &str,
         endpoint: &str,
-        _editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>
+        _editor: &mut Editor<impl rustyline::Helper, impl rustyline::history::History>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Check for API key
-        let api_key = self.config.anthropic_api_key.clone()
+        let api_key = self
+            .config
+            .anthropic_api_key
+            .clone()
             .ok_or("API key not configured. Use 'config api-key' to set it")?;
 
         // Verify API key is not empty
@@ -241,20 +271,22 @@ impl CollectionManager {
             // Get AI response
             let messages = vec![Message {
                 role: Role::User,
-                content: vec![ContentBlock::Text { text: prompt.into() }]
+                content: vec![ContentBlock::Text {
+                    text: prompt.into(),
+                }],
             }];
 
             let messages_request = MessagesRequestBuilder::default()
                 .messages(messages)
-                .model("claude-3-sonnet-20240229".to_string())
+                .model("claude-sonnet-4-5-20250929".to_string())
                 .max_tokens(2000_usize)
                 .build()?;
 
             let response = self.ai_client.messages(messages_request).await?;
-            
+
             // Debug the AI response
             if let Some(ContentBlock::Text { text }) = response.content.first() {
-                println!("AI Response:\n{}", text);  // Debug print
+                println!("AI Response:\n{}", text); // Debug print
                 let examples = Self::parse_mock_examples(&text)?;
                 if examples.is_empty() {
                     println!("⚠️  No valid examples could be parsed from AI response");
@@ -268,8 +300,11 @@ impl CollectionManager {
                     });
 
                     spec.save(&spec_path)?;
-                    println!("✅ Generated and saved {} mock examples", examples_clone.len());
-                    
+                    println!(
+                        "✅ Generated and saved {} mock examples",
+                        examples_clone.len()
+                    );
+
                     // Print example summaries
                     println!("\n📋 Generated mock examples:");
                     for (i, example) in examples_clone.iter().enumerate() {
@@ -291,14 +326,14 @@ impl CollectionManager {
 
         for line in response.lines() {
             let line = line.trim();
-            
+
             if line.contains("{") {
                 in_json = true;
                 current_json = line.to_string();
             } else if in_json {
                 current_json.push_str("\n");
                 current_json.push_str(line);
-                
+
                 if line.contains("}") {
                     in_json = false;
                     // Try to parse and validate JSON
@@ -322,14 +357,25 @@ impl CollectionManager {
         Ok(examples)
     }
 
-    async fn generate_user_flow(&self, spec: &OpenAPISpec) -> Result<Vec<(String, String, Option<String>)>, Box<dyn std::error::Error>> {
+    async fn generate_user_flow(
+        &self,
+        spec: &OpenAPISpec,
+    ) -> Result<Vec<(String, String, Option<String>)>, Box<dyn std::error::Error>> {
         let mut endpoints = Vec::new();
         for (path, item) in &spec.paths {
             if let Some(op) = &item.get {
-                endpoints.push(format!("GET {}\nDescription: {}\n", path, op.summary.as_deref().unwrap_or("")));
+                endpoints.push(format!(
+                    "GET {}\nDescription: {}\n",
+                    path,
+                    op.summary.as_deref().unwrap_or("")
+                ));
             }
             if let Some(op) = &item.post {
-                endpoints.push(format!("POST {}\nDescription: {}\n", path, op.summary.as_deref().unwrap_or("")));
+                endpoints.push(format!(
+                    "POST {}\nDescription: {}\n",
+                    path,
+                    op.summary.as_deref().unwrap_or("")
+                ));
             }
             // Add other methods as needed
         }
@@ -353,12 +399,12 @@ impl CollectionManager {
 
         let message_request = MessagesRequestBuilder::default()
             .messages(messages)
-            .model("claude-3-haiku-20240307".to_string())
+            .model("claude-haiku-4-5-20251001".to_string())
             .max_tokens(800_usize)
             .build()?;
 
         let response = self.ai_client.messages(message_request).await?;
-        
+
         if let Some(ContentBlock::Text { text }) = response.content.first() {
             let mut flow = Vec::new();
             for line in text.lines() {
@@ -372,7 +418,8 @@ impl CollectionManager {
                         } else {
                             None
                         };
-                        println!("   • {} {} | {}", 
+                        println!(
+                            "   • {} {} | {}",
                             style(&method).cyan().to_string(),
                             style(&path).green().to_string(),
                             style(explanation.trim()).dim().to_string()
@@ -387,14 +434,18 @@ impl CollectionManager {
         }
     }
 
-    async fn parse_options(options: &[String]) -> Result<(u32, Duration), Box<dyn std::error::Error>> {
-        let users = options.iter()
+    async fn parse_options(
+        options: &[String],
+    ) -> Result<(u32, Duration), Box<dyn std::error::Error>> {
+        let users = options
+            .iter()
             .position(|x| x == "--users")
             .and_then(|i| options.get(i + 1))
             .and_then(|u| u.parse().ok())
             .unwrap_or(10);
 
-        let duration = options.iter()
+        let duration = options
+            .iter()
             .position(|x| x == "--duration")
             .and_then(|i| options.get(i + 1))
             .and_then(|d| d.trim_end_matches('s').parse().ok())
@@ -408,19 +459,21 @@ impl CollectionManager {
         &self,
         flow: &str,
         endpoint: Option<&str>,
-        options: &[String]
+        options: &[String],
     ) -> Result<(), Box<dyn std::error::Error>> {
         let spec_path = self.get_collection_path(flow);
         let spec = OpenAPISpec::load(&spec_path)?;
         let (users, duration) = Self::parse_options(options).await?;
-        let base_url = spec.servers.first()
+        let base_url = spec
+            .servers
+            .first()
             .map(|s| s.url.as_str())
             .unwrap_or("http://localhost:8000");
 
         // If no specific endpoint is provided, analyze all endpoints
         if endpoint.is_none() {
             println!("🔍 Analyzing flow endpoints...");
-            
+
             // Try AI flow generation if API key is available
             if self.config.api_key.is_some() {
                 println!("🤖 Generating realistic test scenarios...\n");
@@ -428,19 +481,19 @@ impl CollectionManager {
                     if !flow.is_empty() {
                         let perf = PerfCommand::new(&self.config);
                         for (method, path, body) in flow {
-                            println!("\n🚀 Testing {} {}", style(&method).cyan(), style(&path).green());
-                            let url = if path.starts_with("http://") || path.starts_with("https://") {
+                            println!(
+                                "\n🚀 Testing {} {}",
+                                style(&method).cyan(),
+                                style(&path).green()
+                            );
+                            let url = if path.starts_with("http://") || path.starts_with("https://")
+                            {
                                 path.to_string()
                             } else {
                                 format!("{}{}", &base_url, &path)
                             };
-                            perf.run(
-                                &url,
-                                users,
-                                duration,
-                                &method,
-                                body.as_deref()
-                            ).await?;
+                            perf.run(&url, users, duration, &method, body.as_deref())
+                                .await?;
                         }
                         return Ok(());
                     }
@@ -453,11 +506,13 @@ impl CollectionManager {
             for (path, item) in &spec.paths {
                 if let Some(_op) = &item.get {
                     println!("\n🚀 Testing GET {}", style(path).green());
-                    self.run_single_endpoint_test(path, "GET", users, duration, base_url).await?;
+                    self.run_single_endpoint_test(path, "GET", users, duration, base_url)
+                        .await?;
                 }
                 if let Some(_op) = &item.post {
                     println!("\n🚀 Testing POST {}", style(path).green());
-                    self.run_single_endpoint_test(path, "POST", users, duration, base_url).await?;
+                    self.run_single_endpoint_test(path, "POST", users, duration, base_url)
+                        .await?;
                 }
             }
             return Ok(());
@@ -465,12 +520,15 @@ impl CollectionManager {
 
         // Single endpoint test
         let endpoint = endpoint.unwrap();
-        let item = spec.paths.iter()
+        let item = spec
+            .paths
+            .iter()
             .find(|(p, _)| p.contains(endpoint))
             .ok_or("Endpoint not found in flow")?
             .1;
-        
-        let (method, _operation) = item.get_operation()
+
+        let (method, _operation) = item
+            .get_operation()
             .ok_or("No operation found for endpoint")?;
 
         let url = if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
@@ -478,13 +536,14 @@ impl CollectionManager {
         } else {
             format!("{}{}", base_url, endpoint)
         };
-        self.run_single_endpoint_test(&url, method, users, duration, base_url).await
+        self.run_single_endpoint_test(&url, method, users, duration, base_url)
+            .await
     }
 
     pub async fn generate_openapi(
         &self,
         name: &str,
-        format: &str
+        format: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let spec_path = self.get_collection_path(name);
         let mut spec = OpenAPISpec::load(&spec_path)?;
@@ -492,7 +551,10 @@ impl CollectionManager {
         println!("🤖 Analyzing API endpoints and generating documentation...");
 
         // Get API key from config
-        let api_key = self.config.anthropic_api_key.clone()
+        let api_key = self
+            .config
+            .anthropic_api_key
+            .clone()
             .ok_or("API key not configured. Use 'config api-key' to set it")?;
 
         // Verify API key is not empty
@@ -517,22 +579,27 @@ impl CollectionManager {
                        - Response structure explanation\n\
                        - Any important notes or considerations",
                     path,
-                    operation.responses.get("200").and_then(|r| r.content.as_ref())
+                    operation
+                        .responses
+                        .get("200")
+                        .and_then(|r| r.content.as_ref())
                 );
 
                 let messages = vec![Message {
                     role: Role::User,
-                    content: vec![ContentBlock::Text { text: prompt.into() }]
+                    content: vec![ContentBlock::Text {
+                        text: prompt.into(),
+                    }],
                 }];
 
                 let messages_request = MessagesRequestBuilder::default()
                     .messages(messages)
-                    .model("claude-3-sonnet-20240229".to_string())
+                    .model("claude-sonnet-4-5-20250929".to_string())
                     .max_tokens(1000_usize)
                     .build()?;
 
                 let response = self.ai_client.messages(messages_request).await?;
-                
+
                 if let Some(ContentBlock::Text { text }) = response.content.first() {
                     // Parse AI response into summary and description
                     let lines: Vec<&str> = text.lines().collect();
@@ -554,15 +621,18 @@ impl CollectionManager {
             "json" => {
                 let json = serde_json::to_string_pretty(&spec)?;
                 fs::write(&output_path, json)?;
-            },
+            }
             "yaml" => {
                 let yaml = serde_yaml::to_string(&spec)?;
                 fs::write(&output_path, yaml)?;
-            },
+            }
             _ => return Err("Unsupported format".into()),
         }
 
-        println!("✅ Generated enhanced OpenAPI documentation: {}", output_path.display());
+        println!(
+            "✅ Generated enhanced OpenAPI documentation: {}",
+            output_path.display()
+        );
         Ok(())
     }
 
@@ -591,15 +661,25 @@ impl CollectionManager {
 
         // Parse URL and setup servers
         let url = url::Url::parse(&url)?;
-        let base_url = format!("{}://{}", url.scheme(), url.host_str().unwrap_or("localhost"));
-        
+        let base_url = format!(
+            "{}://{}",
+            url.scheme(),
+            url.host_str().unwrap_or("localhost")
+        );
+
         // Extract path parameters and clean path
         let path_segments: Vec<&str> = url.path().split('/').collect();
         let mut path_params = Vec::new();
-        let clean_path = path_segments.iter().enumerate()
+        let clean_path = path_segments
+            .iter()
+            .enumerate()
             .map(|(i, segment)| {
                 if segment.parse::<i64>().is_ok() {
-                    let param_name = if i == path_segments.len() - 1 { "id" } else { &format!("id_{}", i) };
+                    let param_name = if i == path_segments.len() - 1 {
+                        "id"
+                    } else {
+                        &format!("id_{}", i)
+                    };
                     path_params.push(param_name.to_string());
                     format!("{{{}}}", param_name)
                 } else {
@@ -632,7 +712,8 @@ impl CollectionManager {
                - Common use cases\n\
                - Response structure explanation\n\
                - Any important notes or considerations",
-            clean_path, method,
+            clean_path,
+            method,
             response.as_deref().unwrap_or("{}")
         );
 
@@ -652,7 +733,8 @@ impl CollectionManager {
             4. Special characters\n\
             5. Boundary values\n\
             Make each example valid JSON.",
-            clean_path, method,
+            clean_path,
+            method,
             response.as_deref().unwrap_or("{}")
         );
 
@@ -664,18 +746,23 @@ impl CollectionManager {
             summary: Some(summary),
             description: Some(description),
             parameters: if !path_params.is_empty() {
-                Some(path_params.iter().map(|param| Parameter {
-                    name: param.to_string(),
-                    in_: "path".to_string(),
-                    description: Some(format!("Path parameter {}", param)),
-                    required: true,
-                    schema: Schema {
-                        schema_type: "integer".to_string(),
-                        format: Some("int64".to_string()),
-                        properties: None,
-                        items: None,
-                    },
-                }).collect())
+                Some(
+                    path_params
+                        .iter()
+                        .map(|param| Parameter {
+                            name: param.to_string(),
+                            in_: "path".to_string(),
+                            description: Some(format!("Path parameter {}", param)),
+                            required: true,
+                            schema: Schema {
+                                schema_type: "integer".to_string(),
+                                format: Some("int64".to_string()),
+                                properties: None,
+                                items: None,
+                            },
+                        })
+                        .collect(),
+                )
             } else {
                 None
             },
@@ -683,22 +770,28 @@ impl CollectionManager {
                 let mut responses = HashMap::new();
                 if let Some(resp) = response {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&resp) {
-                        responses.insert("200".to_string(), Response {
-                            description: "Successful response".to_string(),
-                            content: Some({
-                                let mut content = HashMap::new();
-                                content.insert("application/json".to_string(), MediaType {
-                                    schema: Schema {
-                                        schema_type: "object".to_string(),
-                                        properties: None,
-                                        items: None,
-                                        format: None,
-                                    },
-                                    example: Some(json),
-                                });
-                                content
-                            }),
-                        });
+                        responses.insert(
+                            "200".to_string(),
+                            Response {
+                                description: "Successful response".to_string(),
+                                content: Some({
+                                    let mut content = HashMap::new();
+                                    content.insert(
+                                        "application/json".to_string(),
+                                        MediaType {
+                                            schema: Schema {
+                                                schema_type: "object".to_string(),
+                                                properties: None,
+                                                items: None,
+                                                format: None,
+                                            },
+                                            example: Some(json),
+                                        },
+                                    );
+                                    content
+                                }),
+                            },
+                        );
                     }
                 }
                 responses
@@ -712,7 +805,10 @@ impl CollectionManager {
         };
 
         // Add operation to path item
-        let path_item = spec.paths.entry(clean_path.clone()).or_insert(PathItem::new());
+        let path_item = spec
+            .paths
+            .entry(clean_path.clone())
+            .or_insert(PathItem::new());
         match method.to_uppercase().as_str() {
             "GET" => path_item.get = Some(operation),
             "POST" => path_item.post = Some(operation),
@@ -723,23 +819,28 @@ impl CollectionManager {
         }
 
         spec.save(&spec_path)?;
-        println!("✅ Saved {} {} to flow {} with documentation and mock data", method, url, flow);
+        println!(
+            "✅ Saved {} {} to flow {} with documentation and mock data",
+            method, url, flow
+        );
         Ok(())
     }
     async fn get_ai_response(&self, prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
         let messages = vec![Message {
             role: Role::User,
-            content: vec![ContentBlock::Text { text: prompt.into() }]
+            content: vec![ContentBlock::Text {
+                text: prompt.into(),
+            }],
         }];
 
         let request = MessagesRequestBuilder::default()
             .messages(messages)
-            .model("claude-3-sonnet-20240229".to_string())
+            .model("claude-sonnet-4-5-20250929".to_string())
             .max_tokens(2000_usize)
             .build()?;
 
         let response = self.ai_client.messages(request).await?;
-        
+
         if let Some(ContentBlock::Text { text }) = response.content.first() {
             Ok(text.clone())
         } else {
@@ -747,45 +848,38 @@ impl CollectionManager {
         }
     }
 
-    fn parse_ai_doc_response(response: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
+    fn parse_ai_doc_response(
+        response: &str,
+    ) -> Result<(String, String), Box<dyn std::error::Error>> {
         let lines: Vec<&str> = response.lines().collect();
         if let Some((summary, rest)) = lines.split_first() {
             Ok((
                 summary.trim().to_string(),
-                rest.join("\n").trim().to_string()
+                rest.join("\n").trim().to_string(),
             ))
         } else {
             Err("Could not parse AI documentation response".into())
         }
     }
 
-
-
-
-// Add a fallback for when AI is not available
-async fn run_single_endpoint_test(
-    &self,
-    endpoint: &str,
-    method: &str,
-    users: u32,
-    duration: Duration,
-    base_url: &str
-) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Running single endpoint test...");
-    let perf = PerfCommand::new(&self.config);
-    let url = if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
-        endpoint.to_string()
-    } else {
-        format!("{}{}", base_url, endpoint)
-    };
-    perf.run(
-        &url,
-        users,
-        duration,
-        method,
-        None
-    ).await
-}
+    // Add a fallback for when AI is not available
+    async fn run_single_endpoint_test(
+        &self,
+        endpoint: &str,
+        method: &str,
+        users: u32,
+        duration: Duration,
+        base_url: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        println!("Running single endpoint test...");
+        let perf = PerfCommand::new(&self.config);
+        let url = if endpoint.starts_with("http://") || endpoint.starts_with("https://") {
+            endpoint.to_string()
+        } else {
+            format!("{}{}", base_url, endpoint)
+        };
+        perf.run(&url, users, duration, method, None).await
+    }
 
     pub fn get_collections_dir(&self) -> PathBuf {
         self.collections_dir.clone()

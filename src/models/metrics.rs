@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime};
 use std::sync::Mutex;
+use std::time::{Duration, SystemTime};
 
 #[derive(Debug)]
 pub struct RequestMetric {
@@ -47,17 +47,18 @@ impl Metrics {
         let mut latencies = self.latencies.lock().unwrap();
         let mut status_codes = self.status_codes.lock().unwrap();
         let mut rps = self.requests_per_second.lock().unwrap();
-        
+
         // Record basic metrics
         latencies.push(metric.duration);
         *status_codes.entry(metric.status).or_insert(0) += 1;
 
         // Update requests per second
-        let current_second = metric.timestamp
+        let current_second = metric
+            .timestamp
             .duration_since(self.start_time)
             .unwrap_or(Duration::from_secs(0))
             .as_secs();
-            
+
         if let Some(last) = rps.last_mut() {
             if last.0.duration_since(self.start_time).unwrap().as_secs() == current_second {
                 last.1 += 1;
@@ -72,7 +73,7 @@ impl Metrics {
     pub fn summary(&self) -> MetricsSummary {
         let latencies = self.latencies.lock().unwrap();
         let rps = self.requests_per_second.lock().unwrap();
-        
+
         MetricsSummary {
             avg_latency: self.calculate_average(&latencies),
             p95_latency: self.calculate_percentile(&latencies, 95),
@@ -89,7 +90,7 @@ impl Metrics {
 
     fn calculate_response_time_ranges(&self, latencies: &Vec<Duration>) -> HashMap<String, usize> {
         let mut ranges = HashMap::new();
-        
+
         for &latency in latencies {
             let ms = latency.as_millis();
             let range = match ms {
@@ -100,7 +101,7 @@ impl Metrics {
             };
             *ranges.entry(range.to_string()).or_insert(0) += 1;
         }
-        
+
         ranges
     }
 
@@ -110,12 +111,14 @@ impl Metrics {
         }
 
         let mean = self.calculate_average(latencies);
-        let variance: f64 = latencies.iter()
+        let variance: f64 = latencies
+            .iter()
             .map(|&duration| {
                 let diff = duration.as_secs_f64() - mean.as_secs_f64();
                 diff * diff
             })
-            .sum::<f64>() / latencies.len() as f64;
+            .sum::<f64>()
+            / latencies.len() as f64;
 
         variance.sqrt()
     }

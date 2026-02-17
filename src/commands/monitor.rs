@@ -1,11 +1,11 @@
+use crate::commands::call::CallCommand;
+use crate::config::Config;
 use anthropic::{
     client::ClientBuilder,
-    types::{Message, ContentBlock, MessagesRequestBuilder, Role},
+    types::{ContentBlock, Message, MessagesRequestBuilder, Role},
 };
-use crate::config::Config;
-use crate::commands::call::CallCommand;
-use std::time::{Duration, SystemTime};
 use serde_json::json;
+use std::time::{Duration, SystemTime};
 use tokio::time::interval;
 
 pub struct MonitorCommand {
@@ -29,71 +29,77 @@ impl MonitorCommand {
 
     /// Smart API monitoring with AI insights
     pub async fn monitor(&self, url: &str, smart: bool) -> Result<(), Box<dyn std::error::Error>> {
-        println!("📊 Starting {} monitoring for: {}", 
-            if smart { "smart AI" } else { "basic" }, url);
-        
+        println!(
+            "📊 Starting {} monitoring for: {}",
+            if smart { "smart AI" } else { "basic" },
+            url
+        );
+
         let mut interval = interval(Duration::from_secs(30));
         let mut check_count = 0;
         let mut historical_data = Vec::new();
-        
+
         loop {
             check_count += 1;
             println!("\n🔍 Health check #{}", check_count);
-            
+
             let result = self.perform_health_check(url).await?;
             historical_data.push(result);
-            
+
             if smart && check_count % 3 == 0 {
                 // Every 3rd check, do AI analysis
                 self.ai_analysis(&historical_data).await?;
             }
-            
+
             // Keep only last 10 results
             if historical_data.len() > 10 {
                 historical_data.drain(0..1);
             }
-            
+
             interval.tick().await;
-            
+
             // For demo purposes, break after 5 checks
             if check_count >= 5 {
                 break;
             }
         }
-        
+
         println!("\n✅ Monitoring session complete!");
         Ok(())
     }
-    
-    async fn perform_health_check(&self, url: &str) -> Result<MonitorResult, Box<dyn std::error::Error>> {
+
+    async fn perform_health_check(
+        &self,
+        url: &str,
+    ) -> Result<MonitorResult, Box<dyn std::error::Error>> {
         let start_time = SystemTime::now();
         let call_command = CallCommand::new();
-        
+
         // Try to make the request
         let mut status = "healthy".to_string();
         let mut issues = Vec::new();
-        
+
         match call_command.execute_with_response(&["GET", url]).await {
             Ok(response) => {
                 let response_time = start_time.elapsed()?;
-                
+
                 // Check response time
                 if response_time > Duration::from_millis(1000) {
                     status = "slow".to_string();
                     issues.push(format!("Slow response: {}ms", response_time.as_millis()));
                 }
-                
+
                 // Check response content
                 if response.contains("error") || response.contains("Error") {
                     status = "warning".to_string();
                     issues.push("Response contains error messages".to_string());
                 }
-                
+
                 if response.len() == 0 {
                     status = "warning".to_string();
                     issues.push("Empty response body".to_string());
                 }
-                
+
                 let result = MonitorResult {
                     url: url.to_string(),
                     status,
@@ -101,7 +107,7 @@ impl MonitorCommand {
                     issues,
                     recommendations: vec![],
                 };
-                
+
                 self.print_health_status(&result);
                 Ok(result)
             }
@@ -113,13 +119,13 @@ impl MonitorCommand {
                     issues: vec![format!("Request failed: {}", e)],
                     recommendations: vec![],
                 };
-                
+
                 self.print_health_status(&result);
                 Ok(result)
             }
         }
     }
-    
+
     fn print_health_status(&self, result: &MonitorResult) {
         let emoji = match result.status.as_str() {
             "healthy" => "💚",
@@ -128,10 +134,14 @@ impl MonitorCommand {
             "error" => "🔴",
             _ => "⚪",
         };
-        
-        println!("{} Status: {} ({}ms)", 
-            emoji, result.status, result.response_time.as_millis());
-        
+
+        println!(
+            "{} Status: {} ({}ms)",
+            emoji,
+            result.status,
+            result.response_time.as_millis()
+        );
+
         if !result.issues.is_empty() {
             println!("  Issues:");
             for issue in &result.issues {
@@ -139,16 +149,20 @@ impl MonitorCommand {
             }
         }
     }
-    
-    async fn ai_analysis(&self, historical_data: &[MonitorResult]) -> Result<(), Box<dyn std::error::Error>> {
+
+    async fn ai_analysis(
+        &self,
+        historical_data: &[MonitorResult],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         println!("\n🤖 AI Analysis of monitoring data...");
-        
-        let api_key = self.config.anthropic_api_key.as_ref()
+
+        let api_key = self
+            .config
+            .anthropic_api_key
+            .as_ref()
             .ok_or("API key not configured for AI analysis")?;
 
-        let ai_client = ClientBuilder::default()
-            .api_key(api_key.clone())
-            .build()?;
+        let ai_client = ClientBuilder::default().api_key(api_key.clone()).build()?;
 
         let analysis_data = json!({
             "monitoring_results": historical_data.iter().map(|r| {
@@ -174,15 +188,18 @@ impl MonitorCommand {
             serde_json::to_string_pretty(&analysis_data)?
         );
 
-        let response = ai_client.messages(MessagesRequestBuilder::default()
-            .messages(vec![Message {
-                role: Role::User,
-                content: vec![ContentBlock::Text { text: prompt }],
-            }])
-            .model("claude-3-sonnet-20240229".to_string())
-            .max_tokens(1000_usize)
-            .build()?
-        ).await?;
+        let response = ai_client
+            .messages(
+                MessagesRequestBuilder::default()
+                    .messages(vec![Message {
+                        role: Role::User,
+                        content: vec![ContentBlock::Text { text: prompt }],
+                    }])
+                    .model("claude-sonnet-4-5-20250929".to_string())
+                    .max_tokens(1000_usize)
+                    .build()?,
+            )
+            .await?;
 
         if let Some(ContentBlock::Text { text }) = response.content.first() {
             println!("📈 AI Insights:");

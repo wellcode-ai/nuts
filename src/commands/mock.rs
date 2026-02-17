@@ -1,18 +1,17 @@
 use crate::flows::{OpenAPISpec, Operation};
-use std::net::SocketAddr;
-use axum::{
-    Router,
-    routing::{get, post},
-    Json,
-    http::StatusCode,
-};
-use serde_json::{Value, json};
-use std::collections::HashMap;
-use std::sync::Arc;
 use axum::extract::Path;
+use axum::{
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
+};
 use axum_server::Server;
-use tokio::signal::ctrl_c;
+use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tokio::signal::ctrl_c;
 
 #[allow(dead_code)]
 pub struct MockServer {
@@ -24,8 +23,8 @@ pub struct MockServer {
 #[allow(dead_code)]
 impl MockServer {
     pub fn new(spec: OpenAPISpec, port: u16) -> Self {
-        Self { 
-            spec, 
+        Self {
+            spec,
             port,
             running: Arc::new(AtomicBool::new(true)),
         }
@@ -42,17 +41,26 @@ impl MockServer {
             // Handle each HTTP method
             if let Some(op) = &item.get {
                 let examples = Arc::new(Self::get_mock_examples(op));
-                router = router.route(&clean_path, get(move |params| Self::handle_request(examples.clone(), params)));
+                router = router.route(
+                    &clean_path,
+                    get(move |params| Self::handle_request(examples.clone(), params)),
+                );
             }
             if let Some(op) = &item.post {
                 let examples = Arc::new(Self::get_mock_examples(op));
-                router = router.route(&clean_path, post(move |params| Self::handle_request(examples.clone(), params)));
+                router = router.route(
+                    &clean_path,
+                    post(move |params| Self::handle_request(examples.clone(), params)),
+                );
             }
             // Add other methods similarly
         }
 
         println!("🎭 Starting mock server on http://127.0.0.1:{}", self.port);
-        println!("📚 Loaded {} endpoints from OpenAPI spec", self.spec.paths.len());
+        println!(
+            "📚 Loaded {} endpoints from OpenAPI spec",
+            self.spec.paths.len()
+        );
         println!("Press Ctrl+C to stop the server");
 
         let addr = SocketAddr::from(([127, 0, 0, 1], self.port));
@@ -75,25 +83,35 @@ impl MockServer {
     }
 
     fn get_mock_examples(op: &Operation) -> Vec<String> {
-        op.mock_data.as_ref()
+        op.mock_data
+            .as_ref()
             .and_then(|m| m.examples.as_ref())
             .cloned()
             .unwrap_or_default()
     }
 
-    async fn handle_request(examples: Arc<Vec<String>>, _params: Path<HashMap<String, String>>) -> (StatusCode, Json<Value>) {
+    async fn handle_request(
+        examples: Arc<Vec<String>>,
+        _params: Path<HashMap<String, String>>,
+    ) -> (StatusCode, Json<Value>) {
         if examples.is_empty() {
-            (StatusCode::NOT_IMPLEMENTED, Json(json!({
-                "error": "No mock examples found"
-            })))
+            (
+                StatusCode::NOT_IMPLEMENTED,
+                Json(json!({
+                    "error": "No mock examples found"
+                })),
+            )
         } else {
             let idx = rand::random::<usize>() % examples.len();
             let example = &examples[idx];
             match serde_json::from_str(example) {
                 Ok(json) => (StatusCode::OK, Json(json)),
-                Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
-                    "error": "Invalid JSON in mock data"
-                })))
+                Err(_) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "error": "Invalid JSON in mock data"
+                    })),
+                ),
             }
         }
     }

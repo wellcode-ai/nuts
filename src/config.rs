@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -8,7 +8,6 @@ pub struct Config {
 }
 
 impl Config {
-
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let path = Self::config_path()?;
         if let Some(parent) = path.parent() {
